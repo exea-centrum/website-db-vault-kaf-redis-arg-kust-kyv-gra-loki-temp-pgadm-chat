@@ -11,8 +11,9 @@ resources:
   - vault-deployment.yaml
   - postgres.yaml
   - pgadmin.yaml
+  - adminer.yaml # DODANO ADMINER
   - redis.yaml
-  - kafka.yaml # Używamy tylko Kafki (KRaft)
+  - kafka.yaml 
   - deployment.yaml
   - service.yaml
   - ingress.yaml
@@ -31,11 +32,11 @@ resources:
 # Poprawiono: 'commonLabels' na 'labels'
 labels:
 - pairs:
-    app: website-db-stack
+    app: webstack-gitops
     environment: development # KLUCZOWE DLA KYVERNO
     managed-by: argocd
 
 images:
   - name: ghcr.io/exea-centrum/website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgadm-chat
-    newName: ghcr.io/exea-centrum/webstack-gitops # Używamy nowej nazwy rejestru
+    newName: ghcr.io/exea-centrum/webstack-gitops 
     newTag: latest

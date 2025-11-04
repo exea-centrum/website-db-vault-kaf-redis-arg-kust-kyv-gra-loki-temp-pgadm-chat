@@ -1,111 +1,77 @@
-# webstack-gitops - Unified GitOps Stack (Zintegrowane Kafka KRaft i Tracing)
+# webstack-gitops - Unified GitOps Stack (Finalna Wersja)
 
 🚀 **Kompleksowa aplikacja z pełnym stack'iem DevOps**
 
-## 📋 Komponenty
+## 📋 KOMPONENTY (WSZYSTKIE)
+- **FastAPI** (App)
+- **PostgreSQL** (DB)
+- **pgAdmin** (DB UI)
+- **Adminer** (DB UI Alternatywa)
+- **Vault** (Secrets, z poprawionym initContainerem)
+- **Kafka KRaft** (Messaging, bez Zookeepera)
+- **Redis** (Cache)
+- **Prometheus/Grafana/Loki/Tempo/Promtail** (Observability)
+- **ArgoCD/Kyverno** (GitOps/Security)
 
-### Aplikacja
-- **FastAPI** - Strona osobista z ankietą. **Wysyła wiadomości do Kafka i Tracing do Tempo.**
-- **PostgreSQL** - Baza danych
-- **pgAdmin** - Zarządzanie bazą danych
+## 🚀 FINALNE KROKI WDROŻENIA (KRYTYCZNE)
 
-### GitOps & Orchestracja
-- **ArgoCD** - Continuous Deployment
-- **Kustomize** - Zarządzanie konfiguracją
-- **Kyverno** - Policy enforcement (Wymaga etykiety `environment: development` w każdym Podzie!)
+### 1. Generowanie i push do Git
 
-### Bezpieczeństwo
-- **Vault** - Zarządzanie sekretami (Konfiguracja naprawiona, aby działać bez `mlock`).
-
-### Messaging & Cache
-- **Kafka (KRaft)** - Kolejka wiadomości. **Usunięto Zookeepera.**
-- **Redis** - Cache i kolejki
-
-### Monitoring & Observability
-- **Prometheus** - Metryki
-- **Grafana** - Wizualizacja (Metryki, Logi, Ślady)
-- **Loki** - Logi (Współpracuje z Promtail)
-- **Tempo** - Distributed tracing. **Zbiera ślady OpenTelemetry z FastAPI.**
-- **Promtail** - Agregacja logów
-
-## ⚠️ WAŻNA INFORMACJA O NOWEJ NAZWIE
-
-**Stara nazwa projektu była za długa, co powodowało błędy Ingress.**
-Nowa, bezpieczna nazwa projektu to: `webstack-gitops`.
-
-Oznacza to, że musisz **utworzyć nowe repozytorium** na GitHub o nazwie `webstack-gitops`.
-
-## 🚀 Finalne Kroki Wdrożenia (KRYTYCZNE)
-
-Musisz usunąć stare zasoby w klastrze i zsynchronizować Git z nową konfiguracją.
-
-### 1. Generowanie i push do nowego repozytorium
+Musisz wygenerować manifesty z **poprawionym Vaultem i Adminerem** i wypchnąć je do repozytorium.
 
 ```bash
 # 1. Usuń stary folder, aby zresetować pliki
 rm -rf manifests/ argocd-application.yaml
 
-# 2. Uruchom skrypt (teraz z nową nazwą PROJECT)
+# 2. Uruchom skrypt
 ./unified-deployment.sh generate
 
-# 3. UTWÓRZ NOWE REPOZYTORIUM na GitHub o nazwie webstack-gitops
-
-# 4. Inicjalizacja Git i push do nowego repo:
-git init
+# 3. Dodaj, commituj i push do repo (użyj nazwy webstack-gitops!)
 git add .
-git commit -m "Final fix: Shortened PROJECT name, implemented Kafka KRaft, and fixed all Kyverno/Vault labels."
-git branch -M main
-git remote add origin https://github.com/exea-centrum/webstack-gitops.git
+git commit -m "Final Fix: Vault initContainer for read-only config fix and added Adminer component."
 git push -u origin main
 ```
 
 ### 2. Czyszczenie starych zasobów w Kubernetes
 
-**To jest niezbędne, aby usunąć pętle restartów (Vault) i stare definicje (Kafka/Zookeeper):**
+**TO JEST KRYTYCZNE DLA NAPRAWY VAULT.** Musisz usunąć stary StatefulSet, aby ArgoCD mogło zastosować nową definicję z InitContainerem.
 
 ```bash
-# Usuń StatefulSety i Service, aby zresetować ich stan
-kubectl delete statefulset vault postgres redis kafka -n davtrowebdbvault
-kubectl delete service vault postgres redis kafka -n davtrowebdbvault
-# Usuń wszelkie zasoby PVC, które mogły zostać utworzone przez stare StatefuSet'y
+# USUŃ WSZYSTKIE StatefulSety, Deploymenty i Ingress, by wymusić restart z poprawną konfiguracją
+kubectl delete deployment -l app -n davtrowebdbvault
+kubectl delete statefulset -l app -n davtrowebdbvault
+kubectl delete ingress webstack-gitops -n davtrowebdbvault
+
+# USUŃ PVC (Ważne dla resetu Vault/Postgres/Kafka/Redis)
 kubectl delete pvc -l app=vault -n davtrowebdbvault
-kubectl delete pvc -l app=kafka -n davtrowebdbvault
 kubectl delete pvc -l app=postgres -n davtrowebdbvault
+kubectl delete pvc -l app=kafka -n davtrowebdbvault
 kubectl delete pvc -l app=redis -n davtrowebdbvault
 
-# Usuń stare zasoby ArgoCD
-kubectl delete application website-db-stack -n argocd
+# Wymuś pełną synchronizację w ArgoCD
+argocd app sync webstack-gitops --refresh --prune
 ```
 
-### 3. Deploy i synchronizacja
+### 3. Weryfikacja Podów i DNS
+
+Po synchronizacji upewnij się, że wszystkie Pody są w stanie **Running**.
 
 ```bash
-# 1. Zastosuj nową Application Defintion
-kubectl apply -f argocd-application.yaml
+kubectl get pods -n davtrowebdbvault
+```
 
-# 2. Wymuś odświeżenie i synchronizację w ArgoCD
-argocd app sync webstack-gitops --refresh --prune
+**Upewnij się, że plik /etc/hosts zawiera nowe wpisy:**
 
-# 3. Zaktualizuj plik /etc/hosts na Twoim komputerze:
-# (Zastąp XXX.XXX.XXX.XXX adresem IP Twojego Ingress Controller'a)
+```
+# Zastąp XXX.XXX.XXX.XXX adresem IP Twojego Ingress Controller'a
 XXX.XXX.XXX.XXX app.webstack-gitops.local
 XXX.XXX.XXX.XXX pgadmin.webstack-gitops.local
 XXX.XXX.XXX.XXX grafana.webstack-gitops.local
+XXX.XXX.XXX.XXX adminer.webstack-gitops.local 
 ```
 
 ## 🌐 Dostęp
-
 - **Aplikacja**: http://app.webstack-gitops.local
 - **pgAdmin**: http://pgadmin.webstack-gitops.local (admin@admin.com / admin)
+- **Adminer**: http://adminer.webstack-gitops.local (Server: `postgres`, User: `appuser`, Pass: `apppass`, DB: `appdb`)
 - **Grafana**: http://grafana.webstack-gitops.local (admin / admin)
-- **Vault**: Dostęp klastrowy (port 8200)
-
-## 🏗️ Architektura
-(Skrócona)
-```
-FastAPI ─┬─> PostgreSQL
-         ├─> Kafka (KRaft)
-         ├─> Tempo (Tracing)
-         ├─> Prometheus (Metrics)
-         └─> Grafana/Loki
-```

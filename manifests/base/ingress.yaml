@@ -5,12 +5,12 @@ metadata:
   namespace: davtrowebdbvault
   annotations:
     nginx.ingress.kubernetes.io/rewrite-target: /
-  labels: # Dodano etykiety
+  labels: 
     app: webstack-gitops
     environment: development
 spec:
   rules:
-  - host: app.webstack-gitops.local # Uproszczona nazwa hosta
+  - host: app.webstack-gitops.local 
     http:
       paths:
       - path: /
@@ -40,3 +40,13 @@ spec:
             name: grafana
             port:
               number: 3000
+  - host: adminer.webstack-gitops.local # DODANO ADMINER
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: adminer
+            port:
+              number: 8080
