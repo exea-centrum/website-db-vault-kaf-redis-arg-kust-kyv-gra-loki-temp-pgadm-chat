@@ -12,6 +12,7 @@ spec:
     metadata:
       labels:
         app: tempo
+        environment: development
     spec:
       containers:
       - name: tempo

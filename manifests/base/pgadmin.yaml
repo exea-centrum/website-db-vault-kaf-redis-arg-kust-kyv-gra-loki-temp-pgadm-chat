@@ -12,6 +12,7 @@ spec:
     metadata:
       labels:
         app: pgadmin
+        environment: development
     spec:
       initContainers:
       - name: wait-for-db

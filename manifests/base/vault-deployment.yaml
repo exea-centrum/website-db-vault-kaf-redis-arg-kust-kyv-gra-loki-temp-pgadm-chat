@@ -13,6 +13,7 @@ spec:
     metadata:
       labels:
         app: vault
+        environment: development
     spec:
       containers:
       - name: vault

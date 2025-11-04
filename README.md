@@ -1,4 +1,4 @@
-# website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgadm-chat - Unified GitOps Stack (Zintegrowane Kafka i Tracing)
+# website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgadm-chat - Unified GitOps Stack (Zintegrowane Kafka KRaft i Tracing)
 
 🚀 **Kompleksowa aplikacja z pełnym stack'iem DevOps**
 
@@ -18,8 +18,8 @@
 - **Vault** - Zarządzanie sekretami
 
 ### Messaging & Cache
-- **Kafka + Zookeeper** - Kolejka wiadomości. **Aplikacja FastAPI jest Producentem.**
-- **Redis** - Cache i kolejki
+- **Kafka (KRaft)** - Kolejka wiadomości. **Uproszczona, bez ZooKeepera.** Aplikacja FastAPI jest Producentem.
+- **Redis** - In-memory cache.
 
 ### Monitoring & Observability (Pełny Trójkąt)
 - **Prometheus** - Metryki
@@ -40,7 +40,7 @@ chmod +x unified-deployment.sh
 ```bash
 git init
 git add .
-git commit -m "Initial commit - unified stack with Kafka and Tempo tracing"
+git commit -m "Initial commit - unified stack with Kafka KRaft and Tempo tracing"
 git branch -M main
 git remote add origin https://github.com/exea-centrum/website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgadm-chat.git
 git push -u origin main
@@ -66,24 +66,17 @@ kubectl apply -f argocd-application.yaml
 # Sprawdź status
 kubectl get applications -n argocd
 kubectl describe application website-db-stack -n argocd
-
-# Zobacz logi sync
-kubectl logs -n argocd -l app.kubernetes.io/name=argocd-application-controller
-```
-
-### 5. Debug jeśli są problemy
-```bash
-# Sprawdź czy repo jest dostępne dla ArgoCD
-argocd repo list
-
-# Dodaj repo jeśli nie ma
-argocd repo add https://github.com/exea-centrum/website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgadm-chat.git
-
-# Sprawdź czy manifesty są poprawne
-kubectl kustomize manifests/base | kubectl apply --dry-run=client -f -
 ```
 
 ## ⚠️ Typowe problemy
+
+### Błąd: ImagePullBackOff lub CrashLoopBackOff w Kafka
+**Przyczyna**: Zazwyczaj oznacza to, że kontener Kafka nie mógł się poprawnie uruchomić, ale błąd pobierania obrazu został naprawiony (używamy teraz stabilnego `bitnami/kafka:3.7.0`). Upewnij się, że PersistentVolumeClaim jest poprawnie powiązany.
+**Rozwiązanie**: Sprawdź logi podu Kafka:
+```bash
+kubectl logs kafka-0 -n davtrowebdbvault
+```
+Pamiętaj, że w trybie KRaft wolumen musi zostać sformatowany tylko raz, co jest obsługiwane przez skrypt startowy kontenera.
 
 ### "app path does not exist"
 **Przyczyna**: Manifesty nie zostały jeszcze wypushowane do repo lub ścieżka jest błędna.
@@ -93,47 +86,12 @@ kubectl kustomize manifests/base | kubectl apply --dry-run=client -f -
 2. Sprawdź czy folder `manifests/base/` istnieje w repo na GitHub
 3. Sprawdź czy plik `manifests/base/kustomization.yaml` jest dostępny
 
-### "Unable to generate manifests"
-**Przyczyna**: Błąd w kustomization.yaml lub brakujący plik.
-
-**Rozwiązanie**:
-```bash
-# Test lokalny
-kubectl kustomize manifests/base
-
-# Sprawdź czy wszystkie pliki istnieją
-ls -la manifests/base/
-```
-
-### ArgoCD nie widzi repo
-**Rozwiązanie**:
-```bash
-# Dodaj credentials dla prywatnego repo
-kubectl create secret generic repo-creds \
-  --from-literal=url=https://github.com/exea-centrum/website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgadm-chat.git \
-  --from-literal=password=YOUR_GITHUB_TOKEN \
-  --from-literal=username=YOUR_GITHUB_USERNAME \
-  -n argocd
-```
-
 ## 🌐 Dostęp
 
 - **Aplikacja**: http://website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgadm-chat.local
 - **pgAdmin**: http://pgadmin.website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgadm-chat.local (admin@admin.com / admin)
 - **Grafana**: http://grafana.website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgadm-chat.local (admin / admin)
 - **Vault**: http://vault.website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgadm-chat.local:8200
-
-## 📊 Baza danych
-
-### Tabele:
-- `survey_responses` - Odpowiedzi z ankiety
-- `page_visits` - Statystyki odwiedzin
-- `contact_messages` - Wiadomości kontaktowe
-
-## 🔐 Sekretna konfiguracja
-
-### GitHub Secrets wymagane:
-- `GHCR_PAT` - Personal Access Token dla GitHub Container Registry
 
 ## 📦 Namespace
 `davtrowebdbvault`
@@ -157,9 +115,10 @@ kubectl create secret generic repo-creds \
 │         │ Tracing (Tempo)                           │
 │         ├────────────┬─────────────┬───────────────┤
 │         ▼            ▼             ▼               ▼
-│  ┌──────────┐  ┌─────────┐  ┌─────────┐    ┌──────────┐
-│  │  Redis   │  │  Kafka  │  │  Vault  │    │ pgAdmin  │
-│  └──────────┘  └─────────┘  └─────────┘    └──────────┘
+│  ┌──────────┐  ┌──────────┐  ┌─────────┐    ┌──────────┐
+│  │  Redis   │  │  Kafka   │  │  Vault  │    │ pgAdmin  │
+│  └──────────┘  │ (KRaft)  │  └─────────┘    └──────────┘
+│                  └──────────┘                                  │
 │                  ^                                  │
 │                  │ Wiadomości (Survey Topic)          │
 │                  │                                  │
@@ -179,28 +138,3 @@ kubectl create secret generic repo-creds \
 │  └─────────────────────────────────────────────┘  │
 └─────────────────────────────────────────────────────┘
 ```
-
-## 🛠️ Rozwój
-
-### Struktura projektu:
-```
-.
-├── app/
-│   ├── main.py              # FastAPI (Producent Kafka, OpenTelemetry Tracing)
-│   ├── requirements.txt     # Zależności Python (+kafka-python, +opentelemetry)
-│   └── templates/
-│       └── index.html       # Frontend
-├── manifests/
-│   └── base/               # Manifesty Kubernetes (Deployment ma Env Vars dla Kafka/Tempo)
-│       ├── *.yaml
-│       └── kustomization.yaml
-├── .github/
-│   └── workflows/
-│       └── ci.yml          # GitHub Actions
-├── Dockerfile
-└── unified-deployment.sh   # Ten skrypt
-```
-
-## 📝 Licencja
-
-MIT License - Dawid Trojanowski © 2025

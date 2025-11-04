@@ -12,6 +12,7 @@ spec:
     metadata:
       labels:
         app: prometheus
+        environment: development
     spec:
       containers:
       - name: prometheus

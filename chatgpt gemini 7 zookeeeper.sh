@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Unified deployment script - combines website app with full GitOps stack
-# Generates FastAPI app + Kubernetes manifests with ArgoCD, Vault, Postgres, Redis, Kafka (KRaft), Grafana, Prometheus, Loki, Tempo, Kyverno
+# Generates FastAPI app + Kubernetes manifests with ArgoCD, Vault, Postgres, Redis, Kafka, Grafana, Prometheus, Loki, Tempo, Kyverno
 
 PROJECT="website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgadm-chat"
 NAMESPACE="davtrowebdbvault"
@@ -414,11 +414,11 @@ psycopg2-binary==2.9.7
 prometheus-fastapi-instrumentator==5.11.1
 python-multipart==0.0.6
 pydantic==2.5.0
-kafka-python==2.0.2
-opentelemetry-api==1.22.0
-opentelemetry-sdk==1.22.0
-opentelemetry-instrumentation-fastapi==0.43b0
-opentelemetry-exporter-otlp==1.22.0
+kafka-python==2.0.2  # <--- NOWA ZALEŻNOŚĆ
+opentelemetry-api==1.22.0 # <--- NOWA ZALEŻNOŚĆ
+opentelemetry-sdk==1.22.0 # <--- NOWA ZALEŻNOŚĆ
+opentelemetry-instrumentation-fastapi==0.43b0 # <--- NOWA ZALEŻNOŚĆ
+opentelemetry-exporter-otlp==1.22.0 # <--- NOWA ZALEŻNOŚĆ
 EOF
 }
 
@@ -586,7 +586,6 @@ metadata:
   namespace: ${NAMESPACE}
   labels:
     app: ${PROJECT}
-    environment: development
 spec:
   replicas: 2
   selector:
@@ -596,7 +595,6 @@ spec:
     metadata:
       labels:
         app: ${PROJECT}
-        environment: development
       annotations:
         prometheus.io/scrape: "true"
         prometheus.io/port: "8000"
@@ -633,7 +631,7 @@ spec:
             configMapKeyRef:
               name: ${PROJECT}-config
               key: DATABASE_URL
-        # KONFIGURACJA KAFKA (Używamy DNS Service name)
+        # KONFIGURACJA KAFKA
         - name: KAFKA_BOOTSTRAP_SERVERS
           value: kafka:9092
         # KONFIGURACJA TRACINGU DLA TEMPO (OTLP)
@@ -748,7 +746,6 @@ spec:
     metadata:
       labels:
         app: postgres
-        environment: development
     spec:
       containers:
       - name: postgres
@@ -827,7 +824,6 @@ spec:
     metadata:
       labels:
         app: pgadmin
-        environment: development
     spec:
       initContainers:
       - name: wait-for-db
@@ -917,7 +913,6 @@ spec:
     metadata:
       labels:
         app: vault
-        environment: development
     spec:
       containers:
       - name: vault
@@ -977,7 +972,6 @@ spec:
     metadata:
       labels:
         app: redis
-        environment: development
     spec:
       containers:
       - name: redis
@@ -1011,38 +1005,47 @@ R
 }
 
 # ==============================
-# KAFKA (KRaft - bez Zookeepera)
+# KAFKA
 # ==============================
 generate_kafka(){
-  info "Generowanie Kafka KRaft (bez Zookeepera)..."
-  
-  cat > "${BASE_DIR}/kafka-config.yaml" <<'KAF_CONFIG'
-apiVersion: v1
-kind: ConfigMap
+  info "Generowanie Kafka + Zookeeper..."
+  cat > "${BASE_DIR}/kafka.yaml" <<'KAF'
+apiVersion: apps/v1
+kind: StatefulSet
 metadata:
-  name: kafka-config
+  name: zookeeper
   namespace: davtrowebdbvault
-data:
-  # To jest unikalne ID naszego brokera (StatefulSet name + index).
-  # W tym wdrożeniu uproszczonym mamy tylko 1 replikę.
-  KAFKA_BROKER_ID: "1"
-  # Unikalny identyfikator klastra KRaft (może być wygenerowany komendą 'kafka-storage.sh random-uuid')
-  KAFKA_CLUSTER_ID: "8u1V3A6G9eI5fC2B4zJ7kT0qM8rN4pQ"
-  # Adres serwera kontrolera (kafka-0.kafka.namespace.svc.cluster.local:9093)
-  KAFKA_CONTROLLER_QUORUM_VOTERS: "1@kafka-0.kafka.davtrowebdbvault.svc.cluster.local:9093"
-  # Konfiguracja KRaft
-  KAFKA_CFG_NODE_ID: "1"
-  KAFKA_CFG_PROCESS_ROLES: "controller,broker"
-  KAFKA_CFG_LISTENERS: "PLAINTEXT://:9092,CONTROLLER://:9093"
-  KAFKA_CFG_ADVERTISED_LISTENERS: "PLAINTEXT://kafka:9092"
-  KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP: "CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT"
-  KAFKA_CFG_CONTROLLER_LISTENER_NAMES: "CONTROLLER"
-  KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE: "true"
-  KAFKA_CFG_OFFSETS_TOPIC_REPLICATION_FACTOR: "1"
-  KAFKA_CFG_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: "1"
-KAF_CONFIG
-
-  cat > "${BASE_DIR}/kafka-deployment.yaml" <<'KAFD'
+spec:
+  serviceName: zookeeper
+  replicas: 1
+  selector:
+    matchLabels:
+      app: zookeeper
+  template:
+    metadata:
+      labels:
+        app: zookeeper
+    spec:
+      containers:
+      - name: zookeeper
+        image: bitnami/zookeeper:3.9.2
+        ports:
+        - containerPort: 2181
+        env:
+        - name: ALLOW_ANONYMOUS_LOGIN
+          value: "yes"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: zookeeper
+  namespace: davtrowebdbvault
+spec:
+  ports:
+  - port: 2181
+  selector:
+    app: zookeeper
+---
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -1058,43 +1061,20 @@ spec:
     metadata:
       labels:
         app: kafka
-        environment: development
     spec:
       containers:
       - name: kafka
-        # Naprawiony obraz: stabilna wersja z obsługą KRaft
-        image: bitnami/kafka:3.7.0
-        envFrom:
-        - configMapRef:
-            name: kafka-config
-        # Skrypt startowy do inicjalizacji wolumenu KRaft i uruchomienia brokera
-        command:
-          - sh
-          - -c
-          - |
-            # Sprawdzenie, czy wolumen KRaft został już zainicjowany
-            if [ ! -d "/bitnami/kafka/data/__cluster_metadata" ]; then
-              echo "Inicjalizacja KRaft storage..."
-              /opt/bitnami/kafka/bin/kafka-storage.sh format \
-                --ignore-formatted \
-                --config /opt/bitnami/kafka/config/server.properties \
-                --cluster-id ${KAFKA_CLUSTER_ID}
-            fi
-            # Uruchomienie brokera
-            /opt/bitnami/kafka/bin/kafka-server-start.sh /opt/bitnami/kafka/config/server.properties
+        image: bitnami/kafka:3.8.0
+        env:
+        - name: KAFKA_CFG_ZOOKEEPER_CONNECT
+          value: zookeeper:2181
+        - name: ALLOW_PLAINTEXT_LISTENER
+          value: "yes"
         ports:
-        - containerPort: 9092 # Port dla klientów (FastAPI)
-        - containerPort: 9093 # Port dla kontrolerów (wewnętrzny)
+        - containerPort: 9092
         volumeMounts:
         - name: kafka-data
           mountPath: /bitnami/kafka
-        resources:
-          requests:
-            memory: "768Mi"
-            cpu: "500m"
-          limits:
-            memory: "1500Mi"
-            cpu: "1000m"
   volumeClaimTemplates:
   - metadata:
       name: kafka-data
@@ -1111,15 +1091,10 @@ metadata:
   namespace: davtrowebdbvault
 spec:
   ports:
-  - name: client
-    port: 9092
-    targetPort: 9092
-  - name: controller
-    port: 9093
-    targetPort: 9093
+  - port: 9092
   selector:
     app: kafka
-KAFD
+KAF
 }
 
 # ==============================
@@ -1159,7 +1134,6 @@ spec:
     metadata:
       labels:
         app: prometheus
-        environment: development
     spec:
       containers:
       - name: prometheus
@@ -1220,7 +1194,6 @@ spec:
     metadata:
       labels:
         app: grafana
-        environment: development
     spec:
       containers:
       - name: grafana
@@ -1311,7 +1284,6 @@ spec:
     metadata:
       labels:
         app: loki
-        environment: development
     spec:
       containers:
       - name: loki
@@ -1386,7 +1358,6 @@ spec:
     metadata:
       labels:
         app: promtail
-        environment: development
     spec:
       containers:
       - name: promtail
@@ -1409,7 +1380,7 @@ PTD
 }
 
 # ==============================
-# TEMPO
+# TEMPO (Zaktualizowano: Dodano porty OTLP)
 # ==============================
 generate_tempo(){
   info "Generowanie Tempo..."
@@ -1427,7 +1398,7 @@ data:
       receivers:
         otlp:
           protocols:
-            grpc: # <--- Odbiera ślady z aplikacji FastAPI (OTLP over gRPC)
+            grpc: # <--- WAŻNE: Odbiera ślady z aplikacji
             http:
     storage:
       trace:
@@ -1451,7 +1422,6 @@ spec:
     metadata:
       labels:
         app: tempo
-        environment: development
     spec:
       containers:
       - name: tempo
@@ -1603,10 +1573,10 @@ STANDALONE
 }
 
 # ==============================
-# KUSTOMIZATION (ZAKTUALIZOWANY: USUNIĘTO ZOOKEEPER, DODANO KRAFT)
+# KUSTOMIZATION
 # ==============================
 generate_kustomization(){
-  info "Generowanie kustomization.yaml (zaktualizowany)..."
+  info "Generowanie kustomization.yaml..."
   cat > "${BASE_DIR}/kustomization.yaml" <<'K'
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
@@ -1622,10 +1592,7 @@ resources:
   - postgres.yaml
   - pgadmin.yaml
   - redis.yaml
-  # Zaktualizowano dla KAFKA KRaft
-  - kafka-config.yaml
-  - kafka-deployment.yaml
-  # Koniec aktualizacji Kafka
+  - kafka.yaml
   - deployment.yaml
   - service.yaml
   - ingress.yaml
@@ -1658,7 +1625,7 @@ K
 generate_readme(){
   info "Generowanie README.md..."
   cat > "${ROOT_DIR}/README.md" <<MD
-# ${PROJECT} - Unified GitOps Stack (Zintegrowane Kafka KRaft i Tracing)
+# ${PROJECT} - Unified GitOps Stack (Zintegrowane Kafka i Tracing)
 
 🚀 **Kompleksowa aplikacja z pełnym stack'iem DevOps**
 
@@ -1678,8 +1645,8 @@ generate_readme(){
 - **Vault** - Zarządzanie sekretami
 
 ### Messaging & Cache
-- **Kafka (KRaft)** - Kolejka wiadomości. **Uproszczona, bez ZooKeepera.** Aplikacja FastAPI jest Producentem.
-- **Redis** - In-memory cache.
+- **Kafka + Zookeeper** - Kolejka wiadomości. **Aplikacja FastAPI jest Producentem.**
+- **Redis** - Cache i kolejki
 
 ### Monitoring & Observability (Pełny Trójkąt)
 - **Prometheus** - Metryki
@@ -1700,7 +1667,7 @@ chmod +x unified-deployment.sh
 \`\`\`bash
 git init
 git add .
-git commit -m "Initial commit - unified stack with Kafka KRaft and Tempo tracing"
+git commit -m "Initial commit - unified stack with Kafka and Tempo tracing"
 git branch -M main
 git remote add origin ${REPO_URL}
 git push -u origin main
@@ -1726,17 +1693,24 @@ kubectl apply -f argocd-application.yaml
 # Sprawdź status
 kubectl get applications -n argocd
 kubectl describe application website-db-stack -n argocd
+
+# Zobacz logi sync
+kubectl logs -n argocd -l app.kubernetes.io/name=argocd-application-controller
+\`\`\`
+
+### 5. Debug jeśli są problemy
+\`\`\`bash
+# Sprawdź czy repo jest dostępne dla ArgoCD
+argocd repo list
+
+# Dodaj repo jeśli nie ma
+argocd repo add ${REPO_URL}
+
+# Sprawdź czy manifesty są poprawne
+kubectl kustomize manifests/base | kubectl apply --dry-run=client -f -
 \`\`\`
 
 ## ⚠️ Typowe problemy
-
-### Błąd: ImagePullBackOff lub CrashLoopBackOff w Kafka
-**Przyczyna**: Zazwyczaj oznacza to, że kontener Kafka nie mógł się poprawnie uruchomić, ale błąd pobierania obrazu został naprawiony (używamy teraz stabilnego \`bitnami/kafka:3.7.0\`). Upewnij się, że PersistentVolumeClaim jest poprawnie powiązany.
-**Rozwiązanie**: Sprawdź logi podu Kafka:
-\`\`\`bash
-kubectl logs kafka-0 -n davtrowebdbvault
-\`\`\`
-Pamiętaj, że w trybie KRaft wolumen musi zostać sformatowany tylko raz, co jest obsługiwane przez skrypt startowy kontenera.
 
 ### "app path does not exist"
 **Przyczyna**: Manifesty nie zostały jeszcze wypushowane do repo lub ścieżka jest błędna.
@@ -1746,12 +1720,47 @@ Pamiętaj, że w trybie KRaft wolumen musi zostać sformatowany tylko raz, co je
 2. Sprawdź czy folder \`manifests/base/\` istnieje w repo na GitHub
 3. Sprawdź czy plik \`manifests/base/kustomization.yaml\` jest dostępny
 
+### "Unable to generate manifests"
+**Przyczyna**: Błąd w kustomization.yaml lub brakujący plik.
+
+**Rozwiązanie**:
+\`\`\`bash
+# Test lokalny
+kubectl kustomize manifests/base
+
+# Sprawdź czy wszystkie pliki istnieją
+ls -la manifests/base/
+\`\`\`
+
+### ArgoCD nie widzi repo
+**Rozwiązanie**:
+\`\`\`bash
+# Dodaj credentials dla prywatnego repo
+kubectl create secret generic repo-creds \\
+  --from-literal=url=${REPO_URL} \\
+  --from-literal=password=YOUR_GITHUB_TOKEN \\
+  --from-literal=username=YOUR_GITHUB_USERNAME \\
+  -n argocd
+\`\`\`
+
 ## 🌐 Dostęp
 
 - **Aplikacja**: http://${PROJECT}.local
 - **pgAdmin**: http://pgadmin.${PROJECT}.local (admin@admin.com / admin)
 - **Grafana**: http://grafana.${PROJECT}.local (admin / admin)
 - **Vault**: http://vault.${PROJECT}.local:8200
+
+## 📊 Baza danych
+
+### Tabele:
+- \`survey_responses\` - Odpowiedzi z ankiety
+- \`page_visits\` - Statystyki odwiedzin
+- \`contact_messages\` - Wiadomości kontaktowe
+
+## 🔐 Sekretna konfiguracja
+
+### GitHub Secrets wymagane:
+- \`GHCR_PAT\` - Personal Access Token dla GitHub Container Registry
 
 ## 📦 Namespace
 \`${NAMESPACE}\`
@@ -1775,10 +1784,9 @@ Pamiętaj, że w trybie KRaft wolumen musi zostać sformatowany tylko raz, co je
 │         │ Tracing (Tempo)                           │
 │         ├────────────┬─────────────┬───────────────┤
 │         ▼            ▼             ▼               ▼
-│  ┌──────────┐  ┌──────────┐  ┌─────────┐    ┌──────────┐
-│  │  Redis   │  │  Kafka   │  │  Vault  │    │ pgAdmin  │
-│  └──────────┘  │ (KRaft)  │  └─────────┘    └──────────┘
-│                  └──────────┘                                  │
+│  ┌──────────┐  ┌─────────┐  ┌─────────┐    ┌──────────┐
+│  │  Redis   │  │  Kafka  │  │  Vault  │    │ pgAdmin  │
+│  └──────────┘  └─────────┘  └─────────┘    └──────────┘
 │                  ^                                  │
 │                  │ Wiadomości (Survey Topic)          │
 │                  │                                  │
@@ -1798,6 +1806,31 @@ Pamiętaj, że w trybie KRaft wolumen musi zostać sformatowany tylko raz, co je
 │  └─────────────────────────────────────────────┘  │
 └─────────────────────────────────────────────────────┘
 \`\`\`
+
+## 🛠️ Rozwój
+
+### Struktura projektu:
+\`\`\`
+.
+├── app/
+│   ├── main.py              # FastAPI (Producent Kafka, OpenTelemetry Tracing)
+│   ├── requirements.txt     # Zależności Python (+kafka-python, +opentelemetry)
+│   └── templates/
+│       └── index.html       # Frontend
+├── manifests/
+│   └── base/               # Manifesty Kubernetes (Deployment ma Env Vars dla Kafka/Tempo)
+│       ├── *.yaml
+│       └── kustomization.yaml
+├── .github/
+│   └── workflows/
+│       └── ci.yml          # GitHub Actions
+├── Dockerfile
+└── unified-deployment.sh   # Ten skrypt
+\`\`\`
+
+## 📝 Licencja
+
+MIT License - Dawid Trojanowski © 2025
 MD
 }
 
@@ -1818,7 +1851,7 @@ generate_all(){
   generate_pgadmin
   generate_vault
   generate_redis
-  generate_kafka # Zmodyfikowano na KRaft
+  generate_kafka
   generate_prometheus
   generate_grafana
   generate_loki
@@ -1827,11 +1860,11 @@ generate_all(){
   generate_kyverno
   generate_argocd_app
   generate_argocd_standalone
-  generate_kustomization # Zmodyfikowano na KRaft
+  generate_kustomization
   generate_readme
   
   echo ""
-  info "✅ WSZYSTKO GOTOWE! (Zintegrowano Kafka KRaft i Tracing dla Tempo)"
+  info "✅ WSZYSTKO GOTOWE! (Zintegrowano Kafka i Tracing dla Tempo)"
   echo ""
   echo "📦 Wygenerowano:"
   echo "   ✓ FastAPI aplikacja w app/ (Producent Kafka, Tracing OTLP)"
@@ -1845,7 +1878,7 @@ generate_all(){
   echo "   ✓ FastAPI + PostgreSQL + pgAdmin"
   echo "   ✓ Vault (secrets management)"
   echo "   ✓ Redis (cache)"
-  echo "   ✓ Kafka (KRaft - bez Zookeepera) [Używa obrazu 3.7.0]"
+  echo "   ✓ Kafka + Zookeeper (messaging, cel: survey-topic)"
   echo "   ✓ Prometheus + Grafana (monitoring)"
   echo "   ✓ Loki + Promtail (logging)"
   echo "   ✓ Tempo (tracing, odbiera ślady z FastAPI na porcie 4317)"
@@ -1857,7 +1890,7 @@ generate_all(){
   echo "1️⃣ Inicjalizacja Git i push:"
   echo "   git init"
   echo "   git add ."
-  echo "   git commit -m 'Initial commit - unified stack with Kafka KRaft and Tempo tracing'"
+  echo "   git commit -m 'Initial commit - unified stack with Kafka and Tempo tracing'"
   echo "   git branch -M main"
   echo "   git remote add origin ${REPO_URL}"
   echo "   git push -u origin main"

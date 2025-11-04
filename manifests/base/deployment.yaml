@@ -5,6 +5,7 @@ metadata:
   namespace: davtrowebdbvault
   labels:
     app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgadm-chat
+    environment: development
 spec:
   replicas: 2
   selector:
@@ -14,6 +15,7 @@ spec:
     metadata:
       labels:
         app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgadm-chat
+        environment: development
       annotations:
         prometheus.io/scrape: "true"
         prometheus.io/port: "8000"
@@ -50,7 +52,7 @@ spec:
             configMapKeyRef:
               name: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgadm-chat-config
               key: DATABASE_URL
-        # KONFIGURACJA KAFKA
+        # KONFIGURACJA KAFKA (Używamy DNS Service name)
         - name: KAFKA_BOOTSTRAP_SERVERS
           value: kafka:9092
         # KONFIGURACJA TRACINGU DLA TEMPO (OTLP)
