@@ -2,7 +2,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: promtail-config
-  namespace: davtrowebdb
+  namespace: davtrowebdbvault
 data:
   promtail.yaml: |
     server:

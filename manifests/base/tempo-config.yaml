@@ -2,7 +2,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: tempo-config
-  namespace: davtrowebdb
+  namespace: davtrowebdbvault
 data:
   tempo.yaml: |
     server:

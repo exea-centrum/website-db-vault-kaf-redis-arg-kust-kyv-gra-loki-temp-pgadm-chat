@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: vault
-  namespace: davtrowebdb
+  namespace: davtrowebdbvault
 spec:
   serviceName: vault
   replicas: 1
@@ -42,7 +42,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: vault
-  namespace: davtrowebdb
+  namespace: davtrowebdbvault
 spec:
   ports:
   - port: 8200

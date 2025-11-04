@@ -1,4 +1,4 @@
-# website-db-argocd-kustomize-kyverno-grafana-loki-tempo-pgadmin - Unified GitOps Stack
+# website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgadm-chat - Unified GitOps Stack
 
 🚀 **Kompleksowa aplikacja z pełnym stack'iem DevOps**
 
@@ -42,7 +42,7 @@ git init
 git add .
 git commit -m "Initial commit - unified stack"
 git branch -M main
-git remote add origin https://github.com/exea-centrum/website-db-argocd-kustomize-kyverno-grafana-loki-tempo-pgadmin.git
+git remote add origin https://github.com/exea-centrum/website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgadm-chat.git
 git push -u origin main
 ```
 
@@ -77,7 +77,7 @@ kubectl logs -n argocd -l app.kubernetes.io/name=argocd-application-controller
 argocd repo list
 
 # Dodaj repo jeśli nie ma
-argocd repo add https://github.com/exea-centrum/website-db-argocd-kustomize-kyverno-grafana-loki-tempo-pgadmin.git
+argocd repo add https://github.com/exea-centrum/website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgadm-chat.git
 
 # Sprawdź czy manifesty są poprawne
 kubectl kustomize manifests/base | kubectl apply --dry-run=client -f -
@@ -110,7 +110,7 @@ ls -la manifests/base/
 ```bash
 # Dodaj credentials dla prywatnego repo
 kubectl create secret generic repo-creds \
-  --from-literal=url=https://github.com/exea-centrum/website-db-argocd-kustomize-kyverno-grafana-loki-tempo-pgadmin.git \
+  --from-literal=url=https://github.com/exea-centrum/website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgadm-chat.git \
   --from-literal=password=YOUR_GITHUB_TOKEN \
   --from-literal=username=YOUR_GITHUB_USERNAME \
   -n argocd
@@ -118,10 +118,10 @@ kubectl create secret generic repo-creds \
 
 ## 🌐 Dostęp
 
-- **Aplikacja**: http://website-db-argocd-kustomize-kyverno-grafana-loki-tempo-pgadmin.local
-- **pgAdmin**: http://pgadmin.website-db-argocd-kustomize-kyverno-grafana-loki-tempo-pgadmin.local (admin@admin.com / admin)
-- **Grafana**: http://grafana.website-db-argocd-kustomize-kyverno-grafana-loki-tempo-pgadmin.local (admin / admin)
-- **Vault**: http://vault.website-db-argocd-kustomize-kyverno-grafana-loki-tempo-pgadmin.local:8200
+- **Aplikacja**: http://website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgadm-chat.local
+- **pgAdmin**: http://pgadmin.website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgadm-chat.local (admin@admin.com / admin)
+- **Grafana**: http://grafana.website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgadm-chat.local (admin / admin)
+- **Vault**: http://vault.website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgadm-chat.local:8200
 
 ## 📊 Baza danych
 
@@ -136,7 +136,7 @@ kubectl create secret generic repo-creds \
 - `GHCR_PAT` - Personal Access Token dla GitHub Container Registry
 
 ## 📦 Namespace
-`davtrowebdb`
+`davtrowebdbvault`
 
 ## 🏗️ Architektura
 

@@ -8,12 +8,12 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: https://github.com/exea-centrum/website-db-argocd-kustomize-kyverno-grafana-loki-tempo-pgadmin.git
+    repoURL: https://github.com/exea-centrum/website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgadm-chat.git
     targetRevision: HEAD
     path: manifests/base
   destination:
     server: https://kubernetes.default.svc
-    namespace: davtrowebdb
+    namespace: davtrowebdbvault
   syncPolicy:
     automated:
       prune: true

@@ -4,8 +4,8 @@ set -euo pipefail
 # Unified deployment script - combines website app with full GitOps stack
 # Generates FastAPI app + Kubernetes manifests with ArgoCD, Vault, Postgres, Redis, Kafka, Grafana, Prometheus, Loki, Tempo, Kyverno
 
-PROJECT="website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgadm-chat"
-NAMESPACE="davtrowebdbvault"
+PROJECT="website-db-argocd-kustomize-kyverno-grafana-loki-tempo-pgadmin"
+NAMESPACE="davtrowebdb"
 ORG="exea-centrum"
 REGISTRY="ghcr.io/${ORG}/${PROJECT}"
 REPO_URL="https://github.com/${ORG}/${PROJECT}.git"
@@ -629,7 +629,7 @@ apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: postgres
-  namespace: davtrowebdbvault
+  namespace: davtrowebdb
 spec:
   serviceName: postgres
   replicas: 1
@@ -687,7 +687,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: postgres
-  namespace: davtrowebdbvault
+  namespace: davtrowebdb
 spec:
   selector:
     app: postgres
@@ -908,7 +908,7 @@ apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: zookeeper
-  namespace: davtrowebdbvault
+  namespace: davtrowebdb
 spec:
   serviceName: zookeeper
   replicas: 1
@@ -933,7 +933,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: zookeeper
-  namespace: davtrowebdbvault
+  namespace: davtrowebdb
 spec:
   ports:
   - port: 2181
@@ -944,7 +944,7 @@ apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: kafka
-  namespace: davtrowebdbvault
+  namespace: davtrowebdb
 spec:
   serviceName: kafka
   replicas: 1
@@ -982,7 +982,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: kafka
-  namespace: davtrowebdbvault
+  namespace: davtrowebdb
 spec:
   ports:
   - port: 9092
@@ -1394,12 +1394,12 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: https://github.com/exea-centrum/website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgadm-chat.git
+    repoURL: https://github.com/exea-centrum/website-db-argocd-kustomize-kyverno-grafana-loki-tempo-pgadmin.git
     targetRevision: HEAD
     path: manifests/base
   destination:
     server: https://kubernetes.default.svc
-    namespace: davtrowebdbvault
+    namespace: davtrowebdb
   syncPolicy:
     automated:
       prune: true
@@ -1433,12 +1433,12 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: https://github.com/exea-centrum/website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgadm-chat.git
+    repoURL: https://github.com/exea-centrum/website-db-argocd-kustomize-kyverno-grafana-loki-tempo-pgadmin.git
     targetRevision: HEAD
     path: manifests/base
   destination:
     server: https://kubernetes.default.svc
-    namespace: davtrowebdbvault
+    namespace: davtrowebdb
   syncPolicy:
     automated:
       prune: true
@@ -1465,7 +1465,7 @@ generate_kustomization(){
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
-namespace: davtrowebdbvault
+namespace: davtrowebdb
 
 resources:
   - service-account.yaml
@@ -1498,7 +1498,7 @@ commonLabels:
   managed-by: argocd
 
 images:
-  - name: ghcr.io/exea-centrum/website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgadm-chat
+  - name: ghcr.io/exea-centrum/website-db-argocd-kustomize-kyverno-grafana-loki-tempo-pgadmin
     newTag: latest
 K
 }

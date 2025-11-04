@@ -1,14 +1,233 @@
-#!/usr/bin/env bash
+# ==============================
+# STANDALONE ARGOCD APP (do apply z CLI)
+# ==============================
+generate_argocd_standalone(){
+  info "Generowanie standalone ArgoCD Application (poza kustomization)..."
+  cat > "${ROOT_DIR}/argocd-application.yaml" <<EOF
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: ${APP_NAME}
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: ${REPO_URL}
+    targetRevision: HEAD
+    path: manifests/base
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: ${NAMESPACE}
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - PrunePropagationPolicy=foreground
+      - ServerSideApply=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m
+EOF
+
+  # Dodatkowo - wersja dla UI ArgoCD (JSON/YAML do wklejenia)
+  cat > "${ROOT_DIR}/argocd-ui-paste.yaml" <<EOF
+# =====================================================
+# WKLEJ TO W UI ARGOCD (Edit as YAML)
+# =====================================================
+# Repository: ${REPO_URL}
+# Namespace: ${NAMESPACE}
+# =====================================================
+
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: ${APP_NAME}
+spec:
+  project: default
+  source:
+    repoURL: '${REPO_URL}'
+    targetRevision: main
+    path: manifests/base
+  destination:
+    server: 'https://kubernetes.default.svc'
+    namespace: ${NAMESPACE}
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+EOF
+}
+#!/bin/bash
+set -e
+
+echo "🔍 Weryfikacja przed deployment do ArgoCD..."
+echo ""
+
+# 1. Sprawdź czy jesteśmy w git repo
+if [ ! -d .git ]; then
+    echo "❌ Nie jesteś w repozytorium Git!"
+    echo "   Uruchom: git init"
+    exit 1
+fi
+echo "✅ Git repo istnieje"
+
+# 2. Sprawdź czy są commity
+if ! git rev-parse HEAD >/dev/null 2>&1; then
+    echo "❌ Brak commitów!"
+    echo "   Uruchom: git add . && git commit -m 'init'"
+    exit 1
+fi
+echo "✅ Commity istnieją"
+
+# 3. Sprawdź czy jest remote
+if ! git remote get-url origin >/dev/null 2>&1; then
+    echo "❌ Brak remote origin!"
+    echo "   Uruchom: git remote add origin <URL>"
+    exit 1
+fi
+REMOTE=$(git remote get-url origin)
+echo "✅ Remote origin: $REMOTE"
+
+# 4. Sprawdź czy wypushowano
+LOCAL=$(git rev-parse HEAD 2>/dev/null || echo "none")
+REMOTE_BRANCH=$(git rev-parse origin/$(git branch --show-current) 2>/dev/null || echo "none")
+
+if [ "$LOCAL" != "$REMOTE_BRANCH" ]; then
+    echo "⚠️  UWAGA: Lokalne zmiany nie są wypushowane!"
+    echo "   Uruchom: git push -u origin main"
+    echo ""
+    echo "   Lokalna wersja:  $LOCAL"
+    echo "   Remote wersja:   $REMOTE_BRANCH"
+    exit 1
+fi
+echo "✅ Zmiany wypushowane do remote"
+
+# 5. Sprawdź czy manifests/base istnieje
+if [ ! -d manifests/base ]; then
+    echo "❌ Folder manifests/base/ nie istnieje!"
+    exit 1
+fi
+echo "✅ Folder manifests/base/ istnieje"
+
+# 6. Sprawdź czy kustomization.yaml istnieje
+if [ ! -f manifests/base/kustomization.yaml ]; then
+    echo "❌ Brak manifests/base/kustomization.yaml!"
+    exit 1
+fi
+echo "✅ kustomization.yaml istnieje"
+
+# 7. Test kustomize
+echo ""
+echo "🧪 Test Kustomize build..."
+if kubectl kustomize manifests/base >/dev/null 2>&1; then
+    echo "✅ Kustomize build sukces!"
+else
+    echo "❌ Kustomize build FAILED!"
+    echo ""
+    echo "Sprawdź błędy:"
+    kubectl kustomize manifests/base
+    exit 1
+fi
+
+# 8. Podsumowanie
+echo ""
+echo "================================================"
+echo "✅ WSZYSTKO GOTOWE DO DEPLOYMENT W ARGOCD!"
+echo "================================================"
+echo ""
+echo "Repository: $REMOTE"
+echo "Branch: $(git branch --show-current)"
+echo "Commit: $(git rev-parse --short HEAD)"
+echo ""
+echo "Następne kroki:"
+echo "1. Otwórz ArgoCD UI"
+echo "2. Kliknij '+ NEW APP'"
+echo "3. Wklej zawartość z: argocd-ui-paste.yaml"
+echo "4. LUB użyj: kubectl apply -f argocd-application.yaml"
+echo ""
+VERIFY
+  chmod +x "${ROOT_DIR}/verify-before-argocd.sh"
+}
+
+# ==============================
+# QUICK START GUIDE
+# ==============================
+generate_quickstart(){
+  info "Generowanie quick start guide..."
+  cat > "${ROOT_DIR}/QUICKSTART.md" <<'QS'
+# 🚀 Quick Start Guide
+
+## Krok 1: Wygeneruj wszystko
+```bash
+chmod +x unified-deployment.sh
+./unified-deployment.sh generate
+```
+
+## Krok 2: Utwórz repo na GitHub
+1. Idź na https://github.com/new
+2. Nazwa: `website-db-argocd-kustomize-kyverno-grafana-loki-tempo-pgadmin`
+3. Ustaw jako **Public** (lub Private z odpowiednimi credentials)
+4. **NIE** inicjalizuj z README/LICENSE/.gitignore
+5. Kliknij **Create repository**
+
+## Krok 3: Push do GitHub
+```bash
+# Dostosuj USERNAME do swojego
+GITHUB_USERNAME="exea-centrum"
+REPO_NAME="website-db-argocd-kustomize-kyverno-grafana-loki-tempo-pgadmin"
+
+git init
+git add .
+git commit -m "Initial commit: unified deployment stack"
+git branch -M main
+git remote add origin "https://github.com/${GITHUB_USERNAME}/${REPO_NAME}.git"
+git push -u origin main
+```
+
+## Krok 4: Weryfikuj przed ArgoCD
+```bash
+./verify-before-argocd.sh
+```
+
+Jeśli zobaczysz "✅ WSZYSTKO GOTOWE" - możesz przejść dalej!
+
+## Krok 5a: Deploy przez ArgoCD UI
+
+### Metoda 1: Edit as YAML
+1. Otwórz ArgoCD UI
+2. Kliknij **+ NEW APP**
+3. Kliknij **EDIT AS YAML** (prawy górny róg)
+4. Skopiuj zawartość z `argocd-ui-paste.yaml`
+5. **ZMIEŃ** `repoURL` na swoje repo!
+6. Kliknij **SAVE**
+7. Kliknij **CREATE**
+
+### Metoda 2: Formularz
+1. Application#!/usr/bin/env bash
 set -euo pipefail
 
 # Unified deployment script - combines website app with full GitOps stack
 # Generates FastAPI app + Kubernetes manifests with ArgoCD, Vault, Postgres, Redis, Kafka, Grafana, Prometheus, Loki, Tempo, Kyverno
 
-PROJECT="website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgadm-chat"
-NAMESPACE="davtrowebdbvault"
+# POPRAWNE ZMIENNE - zgodne z chatgpt.sh
+APP_NAME="website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgadm-chat"
 ORG="exea-centrum"
-REGISTRY="ghcr.io/${ORG}/${PROJECT}"
-REPO_URL="https://github.com/${ORG}/${PROJECT}.git"
+NAMESPACE="davtrowebdbvault"
+IMAGE="ghcr.io/${ORG}/${APP_NAME}:latest"
+REPO_URL="https://github.com/${ORG}/${APP_NAME}.git"
+
+# Aliasy dla kompatybilności
+PROJECT="${APP_NAME}"
+REGISTRY="${IMAGE%:*}"
 
 ROOT_DIR="$(pwd)"
 APP_DIR="app"
@@ -450,7 +669,7 @@ generate_k8s_base(){
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: ${PROJECT}-config
+  name: ${APP_NAME}-config
   namespace: ${NAMESPACE}
 data:
   DATABASE_URL: "dbname=appdb user=appuser password=apppass host=postgres"
@@ -475,7 +694,7 @@ EOF
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: ${PROJECT}
+  name: ${APP_NAME}
   namespace: ${NAMESPACE}
 imagePullSecrets:
   - name: ghcr-pull-secret
@@ -486,25 +705,25 @@ EOF
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: ${PROJECT}
+  name: ${APP_NAME}-app
   namespace: ${NAMESPACE}
   labels:
-    app: ${PROJECT}
+    app: ${APP_NAME}
 spec:
   replicas: 2
   selector:
     matchLabels:
-      app: ${PROJECT}
+      app: ${APP_NAME}
   template:
     metadata:
       labels:
-        app: ${PROJECT}
+        app: ${APP_NAME}
       annotations:
         prometheus.io/scrape: "true"
         prometheus.io/port: "8000"
         prometheus.io/path: "/metrics"
     spec:
-      serviceAccountName: ${PROJECT}
+      serviceAccountName: ${APP_NAME}
       initContainers:
       - name: wait-for-db
         image: postgres:14
@@ -526,14 +745,14 @@ spec:
               key: postgres-password
       containers:
       - name: app
-        image: ${REGISTRY}:latest
+        image: ${IMAGE}
         ports:
         - containerPort: 8000
         env:
         - name: DATABASE_URL
           valueFrom:
             configMapKeyRef:
-              name: ${PROJECT}-config
+              name: ${APP_NAME}-config
               key: DATABASE_URL
         resources:
           requests:
@@ -561,13 +780,13 @@ EOF
 apiVersion: v1
 kind: Service
 metadata:
-  name: ${PROJECT}
+  name: ${APP_NAME}-svc
   namespace: ${NAMESPACE}
   labels:
-    app: ${PROJECT}
+    app: ${APP_NAME}
 spec:
   selector:
-    app: ${PROJECT}
+    app: ${APP_NAME}
   ports:
     - port: 80
       targetPort: 8000
@@ -580,23 +799,23 @@ EOF
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: ${PROJECT}
+  name: ${APP_NAME}-ingress
   namespace: ${NAMESPACE}
   annotations:
     nginx.ingress.kubernetes.io/rewrite-target: /
 spec:
   rules:
-  - host: ${PROJECT}.local
+  - host: ${APP_NAME}.local
     http:
       paths:
       - path: /
         pathType: Prefix
         backend:
           service:
-            name: ${PROJECT}
+            name: ${APP_NAME}-svc
             port:
               number: 80
-  - host: pgadmin.${PROJECT}.local
+  - host: pgadmin.${APP_NAME}.local
     http:
       paths:
       - path: /
@@ -606,7 +825,7 @@ spec:
             name: pgadmin
             port:
               number: 80
-  - host: grafana.${PROJECT}.local
+  - host: grafana.${APP_NAME}.local
     http:
       paths:
       - path: /
@@ -624,12 +843,12 @@ EOF
 # ==============================
 generate_postgres(){
   info "Generowanie PostgreSQL..."
-  cat > "${BASE_DIR}/postgres.yaml" <<'EOF'
+  cat > "${BASE_DIR}/postgres.yaml" <<EOF
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: postgres
-  namespace: davtrowebdbvault
+  namespace: ${NAMESPACE}
 spec:
   serviceName: postgres
   replicas: 1
@@ -687,7 +906,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: postgres
-  namespace: davtrowebdbvault
+  namespace: ${NAMESPACE}
 spec:
   selector:
     app: postgres
@@ -903,12 +1122,12 @@ R
 # ==============================
 generate_kafka(){
   info "Generowanie Kafka + Zookeeper..."
-  cat > "${BASE_DIR}/kafka.yaml" <<'KAF'
+  cat > "${BASE_DIR}/kafka.yaml" <<EOF
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: zookeeper
-  namespace: davtrowebdbvault
+  namespace: ${NAMESPACE}
 spec:
   serviceName: zookeeper
   replicas: 1
@@ -933,7 +1152,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: zookeeper
-  namespace: davtrowebdbvault
+  namespace: ${NAMESPACE}
 spec:
   ports:
   - port: 2181
@@ -944,7 +1163,7 @@ apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: kafka
-  namespace: davtrowebdbvault
+  namespace: ${NAMESPACE}
 spec:
   serviceName: kafka
   replicas: 1
@@ -982,13 +1201,13 @@ apiVersion: v1
 kind: Service
 metadata:
   name: kafka
-  namespace: davtrowebdbvault
+  namespace: ${NAMESPACE}
 spec:
   ports:
   - port: 9092
   selector:
     app: kafka
-KAF
+EOF
 }
 
 # ==============================
@@ -996,7 +1215,7 @@ KAF
 # ==============================
 generate_prometheus(){
   info "Generowanie Prometheus..."
-  cat > "${BASE_DIR}/prometheus-config.yaml" <<PC
+  cat > "${BASE_DIR}/prometheus-config.yaml" <<EOF
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -1010,10 +1229,10 @@ data:
       - job_name: 'fastapi'
         metrics_path: /metrics
         static_configs:
-          - targets: ['${PROJECT}:8000']
-PC
+          - targets: ['${APP_NAME}-svc:80']
+EOF
 
-  cat > "${BASE_DIR}/prometheus-deployment.yaml" <<PD
+  cat > "${BASE_DIR}/prometheus-deployment.yaml" <<EOF
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -1053,7 +1272,7 @@ spec:
   - port: 9090
   selector:
     app: prometheus
-PD
+EOF
 }
 
 # ==============================
@@ -1394,12 +1613,12 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: https://github.com/exea-centrum/website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgadm-chat.git
+    repoURL: https://github.com/exea-centrum/website-db-argocd-kustomize-kyverno-grafana-loki-tempo-pgadmin.git
     targetRevision: HEAD
     path: manifests/base
   destination:
     server: https://kubernetes.default.svc
-    namespace: davtrowebdbvault
+    namespace: davtrowebdb
   syncPolicy:
     automated:
       prune: true
@@ -1433,12 +1652,12 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: https://github.com/exea-centrum/website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgadm-chat.git
+    repoURL: https://github.com/exea-centrum/website-db-argocd-kustomize-kyverno-grafana-loki-tempo-pgadmin.git
     targetRevision: HEAD
     path: manifests/base
   destination:
     server: https://kubernetes.default.svc
-    namespace: davtrowebdbvault
+    namespace: davtrowebdb
   syncPolicy:
     automated:
       prune: true
@@ -1461,11 +1680,11 @@ STANDALONE
 # ==============================
 generate_kustomization(){
   info "Generowanie kustomization.yaml..."
-  cat > "${BASE_DIR}/kustomization.yaml" <<'K'
+  cat > "${BASE_DIR}/kustomization.yaml" <<EOF
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
-namespace: davtrowebdbvault
+namespace: ${NAMESPACE}
 
 resources:
   - service-account.yaml
@@ -1493,14 +1712,14 @@ resources:
   - kyverno-policy.yaml
 
 commonLabels:
-  app: website-db-stack
+  app: ${APP_NAME}
   environment: development
   managed-by: argocd
 
 images:
-  - name: ghcr.io/exea-centrum/website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgadm-chat
+  - name: ${REGISTRY}
     newTag: latest
-K
+EOF
 }
 
 # ==============================
@@ -1796,9 +2015,9 @@ generate_all(){
   echo "   ✓ Folder manifests/base/ zawiera wszystkie pliki"
   echo ""
   echo "🌐 Dostęp:"
-  echo "   App: http://${PROJECT}.local"
-  echo "   pgAdmin: http://pgadmin.${PROJECT}.local"
-  echo "   Grafana: http://grafana.${PROJECT}.local"
+  echo "   App: http://${APP_NAME}.local"
+  echo "   pgAdmin: http://pgadmin.${APP_NAME}.local"
+  echo "   Grafana: http://grafana.${APP_NAME}.local"
   echo ""
 }
 
