@@ -1,21 +1,21 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgadm-chat
+  name: website-db-argocd-kustomize-kyverno-grafana-loki-tempo-pgadmin
   namespace: argocd
   finalizers:
     - resources-finalizer.argocd.argoproj.io
 spec:
   project: default
   source:
-    repoURL: https://github.com/exea-centrum/website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgadm-chat.git
+    repoURL: https://github.com/exea-centrum/website-db-argocd-kustomize-kyverno-grafana-loki-tempo-pgadmin.git
     targetRevision: main
     path: manifests/base
     kustomize:
       buildOptions: --load-restrictor=LoadRestrictionsNone
   destination:
     server: https://kubernetes.default.svc
-    namespace: davtrowebdbvault
+    namespace: davtrowebdb
   syncPolicy:
     automated:
       prune: true
@@ -23,8 +23,6 @@ spec:
     syncOptions:
       - CreateNamespace=true
       - PrunePropagationPolicy=foreground
-      - ApplyOutOfSyncOnly=true
-      - Validate=false
   retry:
     limit: 5
     backoff:

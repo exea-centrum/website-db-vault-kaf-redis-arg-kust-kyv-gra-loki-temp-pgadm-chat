@@ -1,14 +1,14 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
-namespace: davtrowebdbvault
+
+namespace: davtrowebdb
 
 resources:
-  - service-accounts.yaml
+  - service-account.yaml
+  - configmap.yaml
+  - secret.yaml
   - vault-config.yaml
-  - vault-server.yaml
-  - vault-agent-injector.yaml
-  - secret-fallback.yaml
-  - grafana-secret.yaml
+  - vault-deployment.yaml
   - postgres.yaml
   - pgadmin.yaml
   - redis.yaml
@@ -18,6 +18,7 @@ resources:
   - ingress.yaml
   - prometheus-config.yaml
   - prometheus-deployment.yaml
+  - grafana-secret.yaml
   - grafana-deployment.yaml
   - loki-config.yaml
   - loki-deployment.yaml
@@ -27,3 +28,11 @@ resources:
   - tempo-deployment.yaml
   - kyverno-policy.yaml
   - argocd-app.yaml
+
+commonLabels:
+  app: website-db-argocd-kustomize-kyverno-grafana-loki-tempo-pgadmin
+  environment: development
+
+images:
+  - name: ghcr.io/exea-centrum/website-db-argocd-kustomize-kyverno-grafana-loki-tempo-pgadmin
+    newTag: latest

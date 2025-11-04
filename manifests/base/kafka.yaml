@@ -1,9 +1,8 @@
-# zookeeper
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: zookeeper
-  namespace: davtrowebdbvault
+  namespace: davtrowebdb
 spec:
   serviceName: zookeeper
   replicas: 1
@@ -16,28 +15,30 @@ spec:
         app: zookeeper
     spec:
       containers:
-        - name: zookeeper
-          image: bitnami/zookeeper:3.9.2
-          ports:
-            - containerPort: 2181
+      - name: zookeeper
+        image: bitnami/zookeeper:3.9.2
+        ports:
+        - containerPort: 2181
+        env:
+        - name: ALLOW_ANONYMOUS_LOGIN
+          value: "yes"
 ---
 apiVersion: v1
 kind: Service
 metadata:
   name: zookeeper
-  namespace: davtrowebdbvault
+  namespace: davtrowebdb
 spec:
   ports:
-    - port: 2181
+  - port: 2181
   selector:
     app: zookeeper
-
-# kafka (single node)
+---
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: kafka
-  namespace: davtrowebdbvault
+  namespace: davtrowebdb
 spec:
   serviceName: kafka
   replicas: 1
@@ -50,34 +51,34 @@ spec:
         app: kafka
     spec:
       containers:
-        - name: kafka
-          image: bitnami/kafka:3.8.0
-          env:
-            - name: KAFKA_CFG_ZOOKEEPER_CONNECT
-              value: zookeeper:2181
-            - name: ALLOW_PLAINTEXT_LISTENER
-              value: "yes"
-          ports:
-            - containerPort: 9092
-          volumeMounts:
-            - name: kafka-data
-              mountPath: /bitnami/kafka
+      - name: kafka
+        image: bitnami/kafka:3.8.0
+        env:
+        - name: KAFKA_CFG_ZOOKEEPER_CONNECT
+          value: zookeeper:2181
+        - name: ALLOW_PLAINTEXT_LISTENER
+          value: "yes"
+        ports:
+        - containerPort: 9092
+        volumeMounts:
+        - name: kafka-data
+          mountPath: /bitnami/kafka
   volumeClaimTemplates:
-    - metadata:
-        name: kafka-data
-      spec:
-        accessModes: ["ReadWriteOnce"]
-        resources:
-          requests:
-            storage: 20Gi
+  - metadata:
+      name: kafka-data
+    spec:
+      accessModes: ["ReadWriteOnce"]
+      resources:
+        requests:
+          storage: 20Gi
 ---
 apiVersion: v1
 kind: Service
 metadata:
   name: kafka
-  namespace: davtrowebdbvault
+  namespace: davtrowebdb
 spec:
   ports:
-    - port: 9092
+  - port: 9092
   selector:
     app: kafka

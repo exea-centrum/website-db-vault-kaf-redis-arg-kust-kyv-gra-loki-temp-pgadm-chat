@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: grafana
-  namespace: davtrowebdbvault
+  namespace: davtrowebdb
 spec:
   replicas: 1
   selector:
@@ -14,40 +14,36 @@ spec:
         app: grafana
     spec:
       containers:
-        - name: grafana
-          image: grafana/grafana:11.1.0
-          env:
-            - name: GF_SECURITY_ADMIN_USER
-              valueFrom:
-                secretKeyRef:
-                  name: grafana-secret
-                  key: admin-user
-            - name: GF_SECURITY_ADMIN_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: grafana-secret
-                  key: admin-password
-          ports:
-            - containerPort: 3000
-          volumeMounts:
-            - name: grafana-data
-              mountPath: /var/lib/grafana
-  volumeClaimTemplates:
-    - metadata:
-        name: grafana-data
-      spec:
-        accessModes: ["ReadWriteOnce"]
+      - name: grafana
+        image: grafana/grafana:latest
+        ports:
+        - containerPort: 3000
+        env:
+        - name: GF_SECURITY_ADMIN_USER
+          valueFrom:
+            secretKeyRef:
+              name: grafana-secret
+              key: admin-user
+        - name: GF_SECURITY_ADMIN_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: grafana-secret
+              key: admin-password
         resources:
           requests:
-            storage: 5Gi
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "200m"
 ---
 apiVersion: v1
 kind: Service
 metadata:
   name: grafana
-  namespace: davtrowebdbvault
+  namespace: davtrowebdb
 spec:
   ports:
-    - port: 3000
+  - port: 3000
   selector:
     app: grafana
