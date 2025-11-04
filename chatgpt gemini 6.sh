@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Unified deployment script - combines website app with full GitOps stack
-# Generates FastAPI app + Kubernetes manifests with ArgoCD, Vault, Postgres, Redis, Kafka, Grafana, Prometheus, Loki, Tempo, Kyverno
+# Generates FastAPI app + Kubernetes manifests with ArgoCD, Vault, Postgres, Redis, Kafka(KRaft), Grafana, Prometheus, Loki, Tempo, Kyverno
 
 PROJECT="website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgadm-chat"
 NAMESPACE="davtrowebdbvault"
@@ -28,10 +28,10 @@ generate_structure(){
 }
 
 # ==============================
-# FASTAPI APLIKACJA (Z KAFKA I TRACINGIEM DLA TEMPO)
+# FASTAPI APLIKACJA
 # ==============================
 generate_fastapi_app(){
-  info "Generowanie FastAPI aplikacji z Kafka i Tracingiem..."
+  info "Generowanie FastAPI aplikacji z ankietą..."
   
   cat << 'EOF' > "$APP_DIR/main.py"
 from fastapi import FastAPI, Form, Request, HTTPException
@@ -46,19 +46,6 @@ from prometheus_fastapi_instrumentator import Instrumentator
 from pydantic import BaseModel
 from typing import List, Dict, Any
 import time
-import json
-
-# Wymagane importy dla Kafka
-from kafka import KafkaProducer
-
-# Wymagane importy dla OpenTelemetry
-from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
-from opentelemetry.sdk.resources import Resource
-from opentelemetry import trace
-from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import BatchSpanProcessor
-from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
-
 
 app = FastAPI(title="Dawid Trojanowski - Strona Osobista")
 templates = Jinja2Templates(directory="templates")
@@ -75,55 +62,8 @@ app.add_middleware(
 )
 
 DB_CONN = os.getenv("DATABASE_URL", "dbname=appdb user=appuser password=apppass host=postgres")
-KAFKA_SERVER = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka:9092")
-OTEL_ENDPOINT = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://tempo:4317")
-SERVICE_NAME = os.getenv("OTEL_SERVICE_NAME", "website-app")
-
 
 Instrumentator().instrument(app).expose(app)
-
-# ========================================================
-# 1. KONFIGURACJA TRACINGU (OpenTelemetry dla Tempo)
-# ========================================================
-
-resource = Resource.create(attributes={
-    "service.name": SERVICE_NAME
-})
-
-trace.set_tracer_provider(
-    TracerProvider(resource=resource)
-)
-tracer = trace.get_tracer(__name__)
-
-# Konfiguracja eksportu do Tempo (OTLP over gRPC)
-otlp_exporter = OTLPSpanExporter(endpoint=OTEL_ENDPOINT)
-span_processor = BatchSpanProcessor(otlp_exporter)
-trace.get_tracer_provider().add_span_processor(span_processor)
-
-# Instrumentacja FastAPI (automatyczne ślady)
-FastAPIInstrumentor.instrument_app(app, tracer_provider=trace.get_tracer_provider())
-
-
-# ========================================================
-# 2. KONFIGURACJA KAFKA
-# ========================================================
-
-def get_kafka_producer():
-    """Inicjalizacja producenta Kafka."""
-    try:
-        producer = KafkaProducer(
-            bootstrap_servers=KAFKA_SERVER.split(','),
-            value_serializer=lambda v: json.dumps(v).encode('utf-8'),
-            api_version=(0, 10, 1) # Zgodność z nowszymi wersjami
-        )
-        logger.info(f"Kafka Producer initialized for {KAFKA_SERVER}")
-        return producer
-    except Exception as e:
-        logger.error(f"Failed to initialize Kafka Producer: {e}")
-        return None
-
-KAFKA_PRODUCER = get_kafka_producer()
-
 
 class SurveyResponse(BaseModel):
     question: str
@@ -197,27 +137,19 @@ def init_database():
 async def startup_event():
     init_database()
 
-@app.on_event("shutdown")
-async def shutdown_event():
-    if KAFKA_PRODUCER:
-        KAFKA_PRODUCER.close()
-        logger.info("Kafka Producer closed.")
-
-
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request):
     """Główna strona osobista"""
-    with tracer.start_as_current_span("db-log-visit"):
-        try:
-            conn = get_db_connection()
-            cur = conn.cursor()
-            cur.execute("INSERT INTO page_visits (page) VALUES ('home')")
-            conn.commit()
-            cur.close()
-            conn.close()
-        except Exception as e:
-            logger.error(f"Error logging page visit: {e}")
-        
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("INSERT INTO page_visits (page) VALUES ('home')")
+        conn.commit()
+        cur.close()
+        conn.close()
+    except Exception as e:
+        logger.error(f"Error logging page visit: {e}")
+    
     return templates.TemplateResponse("index.html", {"request": request})
 
 @app.get("/health")
@@ -237,7 +169,6 @@ async def health_check():
 @app.get("/api/survey/questions")
 async def get_survey_questions():
     """Pobiera listę pytań do ankiety"""
-    # ... (pytania ankiety bez zmian)
     questions = [
         {
             "id": 1,
@@ -274,48 +205,26 @@ async def get_survey_questions():
 
 @app.post("/api/survey/submit")
 async def submit_survey(response: SurveyResponse):
-    """Zapisuje odpowiedź z ankiety i wysyła do Kafka"""
-    
-    with tracer.start_as_current_span("save-to-postgres"):
-        try:
-            conn = get_db_connection()
-            cur = conn.cursor()
-            cur.execute(
-                "INSERT INTO survey_responses (question, answer) VALUES (%s, %s)",
-                (response.question, response.answer)
-            )
-            conn.commit()
-            cur.close()
-            conn.close()
-            logger.info(f"Survey response saved to DB: {response.question} -> {response.answer}")
-        except Exception as e:
-            logger.error(f"Error saving survey response to DB: {e}")
-            raise HTTPException(status_code=500, detail="Błąd podczas zapisywania odpowiedzi w DB")
-
-    with tracer.start_as_current_span("send-to-kafka"):
-        if KAFKA_PRODUCER:
-            message = {
-                "question": response.question,
-                "answer": response.answer,
-                "timestamp": time.time()
-            }
-            try:
-                # Wysłanie wiadomości do topicu
-                KAFKA_PRODUCER.send('survey-topic', value=message)
-                logger.info(f"Message sent to Kafka topic 'survey-topic'")
-            except Exception as e:
-                logger.error(f"Error sending message to Kafka: {e}")
-                # Kontynuujemy pomimo błędu Kafka, bo zapis do DB się powiódł
-                pass
-        else:
-            logger.warning("Kafka Producer is not initialized. Skipping message send.")
-
-
-    return {"status": "success", "message": "Dziękujemy za wypełnienie ankiety! (Zapisano i wysłano do Kafka)"}
+    """Zapisuje odpowiedź z ankiety"""
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute(
+            "INSERT INTO survey_responses (question, answer) VALUES (%s, %s)",
+            (response.question, response.answer)
+        )
+        conn.commit()
+        cur.close()
+        conn.close()
+        logger.info(f"Survey response saved: {response.question} -> {response.answer}")
+        return {"status": "success", "message": "Dziękujemy za wypełnienie ankiety!"}
+    except Exception as e:
+        logger.error(f"Error saving survey response: {e}")
+        raise HTTPException(status_code=500, detail="Błąd podczas zapisywania odpowiedzi")
 
 @app.get("/api/survey/stats")
 async def get_survey_stats():
-    # ... (Statystyki bez zmian)
+    """Pobiera statystyki ankiet"""
     try:
         conn = get_db_connection()
         cur = conn.cursor()
@@ -414,11 +323,6 @@ psycopg2-binary==2.9.7
 prometheus-fastapi-instrumentator==5.11.1
 python-multipart==0.0.6
 pydantic==2.5.0
-kafka-python==2.0.2  # <--- NOWA ZALEŻNOŚĆ
-opentelemetry-api==1.22.0 # <--- NOWA ZALEŻNOŚĆ
-opentelemetry-sdk==1.22.0 # <--- NOWA ZALEŻNOŚĆ
-opentelemetry-instrumentation-fastapi==0.43b0 # <--- NOWA ZALEŻNOŚĆ
-opentelemetry-exporter-otlp==1.22.0 # <--- NOWA ZALEŻNOŚĆ
 EOF
 }
 
@@ -577,7 +481,7 @@ imagePullSecrets:
   - name: ghcr-pull-secret
 EOF
 
-  # App Deployment (Zaktualizowano: Dodano konfigurację Kafka i OpenTelemetry)
+  # App Deployment
   cat > "${BASE_DIR}/deployment.yaml" <<EOF
 apiVersion: apps/v1
 kind: Deployment
@@ -631,16 +535,6 @@ spec:
             configMapKeyRef:
               name: ${PROJECT}-config
               key: DATABASE_URL
-        # KONFIGURACJA KAFKA
-        - name: KAFKA_BOOTSTRAP_SERVERS
-          value: kafka:9092
-        # KONFIGURACJA TRACINGU DLA TEMPO (OTLP)
-        - name: OTEL_SERVICE_NAME
-          value: ${PROJECT}-fastapi
-        - name: OTEL_EXPORTER_OTLP_ENDPOINT
-          value: http://tempo:4317 # Tempo OTLP gRPC endpoint
-        - name: OTEL_EXPORTER_OTLP_PROTOCOL
-          value: grpc
         resources:
           requests:
             memory: "256Mi"
@@ -1005,52 +899,19 @@ R
 }
 
 # ==============================
-# KAFKA
+# KAFKA (KRaft)
 # ==============================
 generate_kafka(){
-  info "Generowanie Kafka + Zookeeper..."
-  cat > "${BASE_DIR}/kafka.yaml" <<'KAF'
-apiVersion: apps/v1
-kind: StatefulSet
-metadata:
-  name: zookeeper
-  namespace: davtrowebdbvault
-spec:
-  serviceName: zookeeper
-  replicas: 1
-  selector:
-    matchLabels:
-      app: zookeeper
-  template:
-    metadata:
-      labels:
-        app: zookeeper
-    spec:
-      containers:
-      - name: zookeeper
-        image: bitnami/zookeeper:3.9.2
-        ports:
-        - containerPort: 2181
-        env:
-        - name: ALLOW_ANONYMOUS_LOGIN
-          value: "yes"
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: zookeeper
-  namespace: davtrowebdbvault
-spec:
-  ports:
-  - port: 2181
-  selector:
-    app: zookeeper
----
+  info "Generowanie Kafka (KRaft)..."
+  # Generowanie unikalnego ID dla klastra Kafka (KRaft cluster ID)
+  KAFKA_CLUSTER_ID=$(od -tx8 -N16 /dev/urandom | head -c 32 | tr -d '[:space:]')
+  
+  cat > "${BASE_DIR}/kafka.yaml" <<KAF
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: kafka
-  namespace: davtrowebdbvault
+  namespace: ${NAMESPACE}
 spec:
   serviceName: kafka
   replicas: 1
@@ -1064,10 +925,28 @@ spec:
     spec:
       containers:
       - name: kafka
-        image: bitnami/kafka:3.8.0
+        image: bitnami/kafka:3.8.0 # Wymagana wersja >= 2.8.0 dla KRaft
         env:
-        - name: KAFKA_CFG_ZOOKEEPER_CONNECT
-          value: zookeeper:2181
+        - name: KAFKA_CFG_NODE_ID
+          value: "1" # Ustawienie unikalnego ID dla każdego brokera/kontrolera
+        - name: KAFKA_CFG_PROCESS_ROLES
+          value: "broker,controller" # All-in-one: broker i kontroler
+        - name: KAFKA_CFG_CONTROLLER_QUORUM_VOTERS
+          value: "1@kafka:9093" # Wskazanie na samego siebie
+        - name: KAFKA_CFG_LISTENERS
+          value: "PLAINTEXT://:9092,CONTROLLER://:9093"
+        - name: KAFKA_CFG_ADVERTISED_LISTENERS
+          value: "PLAINTEXT://kafka:9092"
+        - name: KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP
+          value: "PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT"
+        - name: KAFKA_CFG_INTER_BROKER_LISTENER_NAME
+          value: "PLAINTEXT"
+        - name: KAFKA_CFG_CONTROLLER_LISTENER_NAME
+          value: "CONTROLLER"
+        - name: KAFKA_CFG_LOG_DIRS
+          value: "/bitnami/kafka/data/kraft-combined-logs"
+        - name: KAFKA_KRAFT_CLUSTER_ID
+          value: "${KAFKA_CLUSTER_ID}" # Unikalny ID klastra (wygenerowany)
         - name: ALLOW_PLAINTEXT_LISTENER
           value: "yes"
         ports:
@@ -1088,10 +967,13 @@ apiVersion: v1
 kind: Service
 metadata:
   name: kafka
-  namespace: davtrowebdbvault
+  namespace: ${NAMESPACE}
 spec:
   ports:
   - port: 9092
+    targetPort: 9092
+  - port: 9093 # Port kontrolera KRaft
+    targetPort: 9093
   selector:
     app: kafka
 KAF
@@ -1380,7 +1262,7 @@ PTD
 }
 
 # ==============================
-# TEMPO (Zaktualizowano: Dodano porty OTLP)
+# TEMPO
 # ==============================
 generate_tempo(){
   info "Generowanie Tempo..."
@@ -1398,8 +1280,8 @@ data:
       receivers:
         otlp:
           protocols:
-            grpc: # <--- WAŻNE: Odbiera ślady z aplikacji
             http:
+            grpc:
     storage:
       trace:
         backend: local
@@ -1430,8 +1312,6 @@ spec:
           - -config.file=/etc/tempo/tempo.yaml
         ports:
         - containerPort: 3200
-        - containerPort: 4317 # OTLP gRPC
-        - containerPort: 4318 # OTLP HTTP
         volumeMounts:
         - name: config
           mountPath: /etc/tempo
@@ -1451,15 +1331,7 @@ metadata:
   namespace: ${NAMESPACE}
 spec:
   ports:
-  - name: tempo-http
-    port: 3200
-    targetPort: 3200
-  - name: otlp-grpc
-    port: 4317 # Port dla OpenTelemetry (gRPC)
-    targetPort: 4317
-  - name: otlp-http
-    port: 4318 # Port dla OpenTelemetry (HTTP)
-    targetPort: 4318
+  - port: 3200
   selector:
     app: tempo
 TD
@@ -1620,19 +1492,19 @@ K
 }
 
 # ==============================
-# README (Zaktualizowana)
+# README (Zaktualizowana: Usunięto ZooKeeper, dodano KRaft)
 # ==============================
 generate_readme(){
   info "Generowanie README.md..."
   cat > "${ROOT_DIR}/README.md" <<MD
-# ${PROJECT} - Unified GitOps Stack (Zintegrowane Kafka i Tracing)
+# ${PROJECT} - Unified GitOps Stack
 
 🚀 **Kompleksowa aplikacja z pełnym stack'iem DevOps**
 
 ## 📋 Komponenty
 
 ### Aplikacja
-- **FastAPI** - Strona osobista z ankietą. **Wysyła wiadomości do Kafka i Tracing do Tempo.**
+- **FastAPI** - Strona osobista z ankietą
 - **PostgreSQL** - Baza danych
 - **pgAdmin** - Zarządzanie bazą danych
 
@@ -1645,14 +1517,14 @@ generate_readme(){
 - **Vault** - Zarządzanie sekretami
 
 ### Messaging & Cache
-- **Kafka + Zookeeper** - Kolejka wiadomości. **Aplikacja FastAPI jest Producentem.**
+- **Kafka (KRaft)** - Kolejka wiadomości (tryb all-in-one bez ZooKeepera)
 - **Redis** - Cache i kolejki
 
-### Monitoring & Observability (Pełny Trójkąt)
+### Monitoring & Observability
 - **Prometheus** - Metryki
-- **Grafana** - Wizualizacja (Metryki, Logi, Ślady)
-- **Loki** - Logi (Współpracuje z Promtail)
-- **Tempo** - Distributed tracing. **Zbiera ślady OpenTelemetry z FastAPI.**
+- **Grafana** - Wizualizacja
+- **Loki** - Logi
+- **Tempo** - Distributed tracing
 - **Promtail** - Agregacja logów
 
 ## 🚀 Użycie
@@ -1667,7 +1539,7 @@ chmod +x unified-deployment.sh
 \`\`\`bash
 git init
 git add .
-git commit -m "Initial commit - unified stack with Kafka and Tempo tracing"
+git commit -m "Initial commit - unified stack"
 git branch -M main
 git remote add origin ${REPO_URL}
 git push -u origin main
@@ -1736,10 +1608,10 @@ ls -la manifests/base/
 **Rozwiązanie**:
 \`\`\`bash
 # Dodaj credentials dla prywatnego repo
-kubectl create secret generic repo-creds \\
-  --from-literal=url=${REPO_URL} \\
-  --from-literal=password=YOUR_GITHUB_TOKEN \\
-  --from-literal=username=YOUR_GITHUB_USERNAME \\
+kubectl create secret generic repo-creds \
+  --from-literal=url=${REPO_URL} \
+  --from-literal=password=YOUR_GITHUB_TOKEN \
+  --from-literal=username=YOUR_GITHUB_USERNAME \
   -n argocd
 \`\`\`
 
@@ -1765,7 +1637,7 @@ kubectl create secret generic repo-creds \\
 ## 📦 Namespace
 \`${NAMESPACE}\`
 
-## 🏗️ Architektura (Zintegrowana)
+## 🏗️ Architektura
 
 \`\`\`
 ┌─────────────────────────────────────────────────────┐
@@ -1781,15 +1653,13 @@ kubectl create secret generic repo-creds \\
 │  │   FastAPI    │  │  PostgreSQL  │               │
 │  │   Website    │──│   Database   │               │
 │  └──────────────┘  └──────────────┘               │
-│         │ Tracing (Tempo)                           │
+│         │                                           │
 │         ├────────────┬─────────────┬───────────────┤
 │         ▼            ▼             ▼               ▼
 │  ┌──────────┐  ┌─────────┐  ┌─────────┐    ┌──────────┐
 │  │  Redis   │  │  Kafka  │  │  Vault  │    │ pgAdmin  │
 │  └──────────┘  └─────────┘  └─────────┘    └──────────┘
-│                  ^                                  │
-│                  │ Wiadomości (Survey Topic)          │
-│                  │                                  │
+│                                                     │
 │  ┌─────────────────────────────────────────────┐  │
 │  │         Observability Stack                 │  │
 │  │  ┌──────────┐ ┌─────────┐ ┌──────────┐    │  │
@@ -1813,12 +1683,12 @@ kubectl create secret generic repo-creds \\
 \`\`\`
 .
 ├── app/
-│   ├── main.py              # FastAPI (Producent Kafka, OpenTelemetry Tracing)
-│   ├── requirements.txt     # Zależności Python (+kafka-python, +opentelemetry)
+│   ├── main.py              # FastAPI aplikacja
+│   ├── requirements.txt     # Zależności Python
 │   └── templates/
 │       └── index.html       # Frontend
 ├── manifests/
-│   └── base/               # Manifesty Kubernetes (Deployment ma Env Vars dla Kafka/Tempo)
+│   └── base/               # Manifesty Kubernetes
 │       ├── *.yaml
 │       └── kustomization.yaml
 ├── .github/
@@ -1838,7 +1708,7 @@ MD
 # GŁÓWNA FUNKCJA
 # ==============================
 generate_all(){
-  info "🚀 Rozpoczynam generowanie unified stack..."
+  info "🚀 Rozpoczynam generowanie unified stack (Kafka w trybie KRaft)..."
   echo ""
   
   generate_structure
@@ -1851,7 +1721,7 @@ generate_all(){
   generate_pgadmin
   generate_vault
   generate_redis
-  generate_kafka
+  generate_kafka # ZMODYFIKOWANA
   generate_prometheus
   generate_grafana
   generate_loki
@@ -1861,27 +1731,27 @@ generate_all(){
   generate_argocd_app
   generate_argocd_standalone
   generate_kustomization
-  generate_readme
+  generate_readme # ZMODYFIKOWANA
   
   echo ""
-  info "✅ WSZYSTKO GOTOWE! (Zintegrowano Kafka i Tracing dla Tempo)"
+  info "✅ WSZYSTKO GOTOWE!"
   echo ""
   echo "📦 Wygenerowano:"
-  echo "   ✓ FastAPI aplikacja w app/ (Producent Kafka, Tracing OTLP)"
+  echo "   ✓ FastAPI aplikacja w app/"
   echo "   ✓ Dockerfile"
   echo "   ✓ GitHub Actions workflow"
   echo "   ✓ Kubernetes manifesty w manifests/base/"
   echo "   ✓ argocd-application.yaml (standalone w root)"
   echo "   ✓ README.md"
   echo ""
-  echo "🎯 Komponenty (Zintegrowane):"
+  echo "🎯 Komponenty (Kafka w trybie KRaft, usunięto Zookeeper):"
   echo "   ✓ FastAPI + PostgreSQL + pgAdmin"
   echo "   ✓ Vault (secrets management)"
   echo "   ✓ Redis (cache)"
-  echo "   ✓ Kafka + Zookeeper (messaging, cel: survey-topic)"
+  echo "   ✓ Kafka (KRaft) (messaging)"
   echo "   ✓ Prometheus + Grafana (monitoring)"
   echo "   ✓ Loki + Promtail (logging)"
-  echo "   ✓ Tempo (tracing, odbiera ślady z FastAPI na porcie 4317)"
+  echo "   ✓ Tempo (tracing)"
   echo "   ✓ ArgoCD (GitOps)"
   echo "   ✓ Kyverno (policies)"
   echo ""
@@ -1890,7 +1760,7 @@ generate_all(){
   echo "1️⃣ Inicjalizacja Git i push:"
   echo "   git init"
   echo "   git add ."
-  echo "   git commit -m 'Initial commit - unified stack with Kafka and Tempo tracing'"
+  echo "   git commit -m 'Initial commit - unified stack'"
   echo "   git branch -M main"
   echo "   git remote add origin ${REPO_URL}"
   echo "   git push -u origin main"

@@ -1,11 +1,11 @@
-# website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgadm-chat - Unified GitOps Stack (Zintegrowane Kafka i Tracing)
+# website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgadm-chat - Unified GitOps Stack
 
 🚀 **Kompleksowa aplikacja z pełnym stack'iem DevOps**
 
 ## 📋 Komponenty
 
 ### Aplikacja
-- **FastAPI** - Strona osobista z ankietą. **Wysyła wiadomości do Kafka i Tracing do Tempo.**
+- **FastAPI** - Strona osobista z ankietą
 - **PostgreSQL** - Baza danych
 - **pgAdmin** - Zarządzanie bazą danych
 
@@ -18,14 +18,14 @@
 - **Vault** - Zarządzanie sekretami
 
 ### Messaging & Cache
-- **Kafka + Zookeeper** - Kolejka wiadomości. **Aplikacja FastAPI jest Producentem.**
+- **Kafka (KRaft)** - Kolejka wiadomości (tryb all-in-one bez ZooKeepera)
 - **Redis** - Cache i kolejki
 
-### Monitoring & Observability (Pełny Trójkąt)
+### Monitoring & Observability
 - **Prometheus** - Metryki
-- **Grafana** - Wizualizacja (Metryki, Logi, Ślady)
-- **Loki** - Logi (Współpracuje z Promtail)
-- **Tempo** - Distributed tracing. **Zbiera ślady OpenTelemetry z FastAPI.**
+- **Grafana** - Wizualizacja
+- **Loki** - Logi
+- **Tempo** - Distributed tracing
 - **Promtail** - Agregacja logów
 
 ## 🚀 Użycie
@@ -40,7 +40,7 @@ chmod +x unified-deployment.sh
 ```bash
 git init
 git add .
-git commit -m "Initial commit - unified stack with Kafka and Tempo tracing"
+git commit -m "Initial commit - unified stack"
 git branch -M main
 git remote add origin https://github.com/exea-centrum/website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgadm-chat.git
 git push -u origin main
@@ -109,11 +109,7 @@ ls -la manifests/base/
 **Rozwiązanie**:
 ```bash
 # Dodaj credentials dla prywatnego repo
-kubectl create secret generic repo-creds \
-  --from-literal=url=https://github.com/exea-centrum/website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgadm-chat.git \
-  --from-literal=password=YOUR_GITHUB_TOKEN \
-  --from-literal=username=YOUR_GITHUB_USERNAME \
-  -n argocd
+kubectl create secret generic repo-creds   --from-literal=url=https://github.com/exea-centrum/website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgadm-chat.git   --from-literal=password=YOUR_GITHUB_TOKEN   --from-literal=username=YOUR_GITHUB_USERNAME   -n argocd
 ```
 
 ## 🌐 Dostęp
@@ -138,7 +134,7 @@ kubectl create secret generic repo-creds \
 ## 📦 Namespace
 `davtrowebdbvault`
 
-## 🏗️ Architektura (Zintegrowana)
+## 🏗️ Architektura
 
 ```
 ┌─────────────────────────────────────────────────────┐
@@ -154,15 +150,13 @@ kubectl create secret generic repo-creds \
 │  │   FastAPI    │  │  PostgreSQL  │               │
 │  │   Website    │──│   Database   │               │
 │  └──────────────┘  └──────────────┘               │
-│         │ Tracing (Tempo)                           │
+│         │                                           │
 │         ├────────────┬─────────────┬───────────────┤
 │         ▼            ▼             ▼               ▼
 │  ┌──────────┐  ┌─────────┐  ┌─────────┐    ┌──────────┐
 │  │  Redis   │  │  Kafka  │  │  Vault  │    │ pgAdmin  │
 │  └──────────┘  └─────────┘  └─────────┘    └──────────┘
-│                  ^                                  │
-│                  │ Wiadomości (Survey Topic)          │
-│                  │                                  │
+│                                                     │
 │  ┌─────────────────────────────────────────────┐  │
 │  │         Observability Stack                 │  │
 │  │  ┌──────────┐ ┌─────────┐ ┌──────────┐    │  │
@@ -186,12 +180,12 @@ kubectl create secret generic repo-creds \
 ```
 .
 ├── app/
-│   ├── main.py              # FastAPI (Producent Kafka, OpenTelemetry Tracing)
-│   ├── requirements.txt     # Zależności Python (+kafka-python, +opentelemetry)
+│   ├── main.py              # FastAPI aplikacja
+│   ├── requirements.txt     # Zależności Python
 │   └── templates/
 │       └── index.html       # Frontend
 ├── manifests/
-│   └── base/               # Manifesty Kubernetes (Deployment ma Env Vars dla Kafka/Tempo)
+│   └── base/               # Manifesty Kubernetes
 │       ├── *.yaml
 │       └── kustomization.yaml
 ├── .github/
