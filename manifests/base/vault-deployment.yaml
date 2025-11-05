@@ -1,4 +1,3 @@
-# manifests/base/vault-deployment.yaml
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -19,13 +18,10 @@ spec:
         app: vault
         environment: development
     spec:
-      # =================================================================
-      # ZMIANA 1: Ustawienie securityContext dla Pod,
-      # aby umożliwić kontenerowi Vault poprawne zarządzanie UID/GID.
-      # =================================================================
+      # ZMIANA 1: Dodanie securityContext na poziomie Pod
       securityContext:
-        runAsUser: 0 # Uruchom jako root (jest to standardowa praktyka dla oficjalnego obrazu Vault)
-        fsGroup: 100 # Ustawienie grupy dla wolumenów, pomaga w uprawnieniach
+        runAsUser: 0 # Uruchom jako root, aby uniknąć problemów z uprawnieniami chown
+        fsGroup: 100
 
       containers:
         - name: vault
@@ -33,22 +29,41 @@ spec:
           args: ["server", "-config=/vault/config/vault.hcl"]
           ports:
             - containerPort: 8200
-          # =================================================================
-          # ZMIANA 2: Użycie 'subPath' zamiast całego ConfigMap VolumeMount.
-          # Pomaga to obejść błąd 'chown' na wolumenie ConfigMap.
-          # =================================================================
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "200m"
+            limits:
+              memory: "1Gi"
+              cpu: "500m"
           volumeMounts:
+            # ZMIANA 2: Użycie 'subPath' do montowania pliku konfiguracyjnego
             - name: vault-config
-              mountPath: /vault/config/vault.hcl # Montujemy tylko plik, nie cały katalog
-              subPath: vault.hcl # Wskazujemy konkretny plik w ConfigMap
+              mountPath: /vault/config/vault.hcl
+              subPath: vault.hcl
             - name: vault-data
               mountPath: /vault/data
-          # Zmiana 3: Dodanie capability IPC_LOCK,
-          # aby uniknąć ostrzeżenia 'Disabling IPC_LOCK'
+          # ZMIANA 3: Dodanie capability IPC_LOCK
           securityContext:
             capabilities:
               add:
                 - IPC_LOCK
+
+      # ZMIANA 4: Dodanie wymaganej sekcji volumes dla Pod (ConfigMap)
+      volumes:
+        - name: vault-config
+          configMap:
+            name: vault-config
+
+  # ZMIANA 5: Dodanie wymaganej sekcji volumeClaimTemplates dla StatefulSet (PVC)
+  volumeClaimTemplates:
+    - metadata:
+        name: vault-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 10Gi
 ---
 apiVersion: v1
 kind: Service
@@ -61,6 +76,7 @@ metadata:
 spec:
   ports:
     - port: 8200
+      targetPort: 8200
   selector:
     app: vault
   type: ClusterIP
