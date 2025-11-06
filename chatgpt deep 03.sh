@@ -441,24 +441,26 @@ HTMLEOF
 # ==============================
 generate_dockerfile(){
   info "Generating Dockerfile..."
-  cat << 'EOF' > "${ROOT_DIR}/Dockerfile"
+  cat << EOF > "${ROOT_DIR}/Dockerfile"
 FROM python:3.11-slim-bullseye
 
 WORKDIR /app
 
 # Environment variables
-ENV PYTHONDONTWRITEBYTECODE=1
-ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE 1
+ENV PYTHONUNBUFFERED 1
 
 # Copy dependencies
 COPY app/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
-COPY app/ /app/
+COPY ./app /app/app
+COPY ./static /app/static
+COPY ./templates /app/templates
 
 # Start application
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
 EOF
 }
 
@@ -491,7 +493,7 @@ jobs:
         with:
           registry: ghcr.io
           username: \${{ github.repository_owner }}
-          password: \${{ secrets.GITHUB_TOKEN }}
+          password: \${{ secrets.GHCR_PAT }}
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
