@@ -12,10 +12,10 @@ from typing import List, Dict, Any
 import time
 import json
 
-# Kafka imports
+# Wymagane importy dla Kafka
 from kafka import KafkaProducer
 
-# OpenTelemetry imports
+# Wymagane importy dla OpenTelemetry
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from opentelemetry.sdk.resources import Resource
 from opentelemetry import trace
@@ -23,12 +23,13 @@ from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
 
-app = FastAPI(title="Dawid Trojanowski - Personal Website")
+
+app = FastAPI(title="Dawid Trojanowski - Strona Osobista")
 templates = Jinja2Templates(directory="templates")
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("fastapi_app")
 
-# CORS configuration
+# Konfiguracja CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -37,16 +38,18 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-DB_CONN = os.getenv("DATABASE_URL", "dbname=webdb user=webuser password=webpass host=postgres-db")
+DB_CONN = os.getenv("DATABASE_URL", "dbname=appdb user=appuser password=apppass host=postgres")
 KAFKA_SERVER = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka:9092")
 OTEL_ENDPOINT = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://tempo:4317")
-SERVICE_NAME = os.getenv("OTEL_SERVICE_NAME", "webstack-app")
+SERVICE_NAME = os.getenv("OTEL_SERVICE_NAME", "website-app")
+
 
 Instrumentator().instrument(app).expose(app)
 
 # ========================================================
-# 1. TRACING CONFIGURATION (OpenTelemetry for Tempo)
+# 1. KONFIGURACJA TRACINGU (OpenTelemetry dla Tempo)
 # ========================================================
+
 resource = Resource.create(attributes={
     "service.name": SERVICE_NAME
 })
@@ -56,19 +59,21 @@ trace.set_tracer_provider(
 )
 tracer = trace.get_tracer(__name__)
 
-# Configure export to Tempo (OTLP over gRPC)
+# Konfiguracja eksportu do Tempo (OTLP over gRPC)
 otlp_exporter = OTLPSpanExporter(endpoint=OTEL_ENDPOINT)
 span_processor = BatchSpanProcessor(otlp_exporter)
 trace.get_tracer_provider().add_span_processor(span_processor)
 
-# FastAPI instrumentation (automatic traces)
+# Instrumentacja FastAPI (automatyczne ślady)
 FastAPIInstrumentor.instrument_app(app, tracer_provider=trace.get_tracer_provider())
 
+
 # ========================================================
-# 2. KAFKA CONFIGURATION
+# 2. KONFIGURACJA KAFKA
 # ========================================================
+
 def get_kafka_producer():
-    """Initialize Kafka producer."""
+    """Inicjalizacja producenta Kafka."""
     try:
         producer = KafkaProducer(
             bootstrap_servers=KAFKA_SERVER.split(','),
@@ -83,12 +88,13 @@ def get_kafka_producer():
 
 KAFKA_PRODUCER = get_kafka_producer()
 
+
 class SurveyResponse(BaseModel):
     question: str
     answer: str
 
 def get_db_connection():
-    """Create database connection with retry logic"""
+    """Utwórz połączenie z bazą danych z retry logic"""
     max_retries = 30
     for attempt in range(max_retries):
         try:
@@ -103,14 +109,14 @@ def get_db_connection():
                 raise e
 
 def init_database():
-    """Initialize database"""
+    """Inicjalizacja bazy danych"""
     max_retries = 30
     for attempt in range(max_retries):
         try:
             conn = get_db_connection()
             cur = conn.cursor()
             
-            # Survey responses table
+            # Tabela odpowiedzi ankiet
             cur.execute("""
                 CREATE TABLE IF NOT EXISTS survey_responses(
                     id SERIAL PRIMARY KEY,
@@ -120,7 +126,7 @@ def init_database():
                 )
             """)
             
-            # Page visits table
+            # Tabela odwiedzin stron
             cur.execute("""
                 CREATE TABLE IF NOT EXISTS page_visits(
                     id SERIAL PRIMARY KEY,
@@ -129,7 +135,7 @@ def init_database():
                 )
             """)
             
-            # Contact messages table
+            # Tabela kontaktów
             cur.execute("""
                 CREATE TABLE IF NOT EXISTS contact_messages(
                     id SERIAL PRIMARY KEY,
@@ -161,9 +167,10 @@ async def shutdown_event():
         KAFKA_PRODUCER.close()
         logger.info("Kafka Producer closed.")
 
+
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request):
-    """Home page"""
+    """Główna strona osobista"""
     with tracer.start_as_current_span("db-log-visit"):
         try:
             conn = get_db_connection()
@@ -193,26 +200,44 @@ async def health_check():
 
 @app.get("/api/survey/questions")
 async def get_survey_questions():
-    """Get survey questions"""
+    """Pobiera listę pytań do ankiety"""
     questions = [
         {
             "id": 1,
-            "text": "How do you rate the website design?",
+            "text": "Jak oceniasz design strony?",
             "type": "rating",
-            "options": ["1 - Poor", "2", "3", "4", "5 - Excellent"]
+            "options": ["1 - Słabo", "2", "3", "4", "5 - Doskonale"]
         },
         {
             "id": 2,
-            "text": "Was the information helpful?",
+            "text": "Czy informacje były przydatne?",
             "type": "choice",
-            "options": ["Yes", "Rather yes", "Don't know", "Rather no", "No"]
+            "options": ["Tak", "Raczej tak", "Nie wiem", "Raczej nie", "Nie"]
+        },
+        {
+            "id": 3,
+            "text": "Jakie technologie Cię zainteresowaƂy?",
+            "type": "multiselect",
+            "options": ["Python", "JavaScript", "React", "Kubernetes", "Docker", "PostgreSQL"]
+        },
+        {
+            "id": 4,
+            "text": "Czy poleciłbyś tę stronę innym?",
+            "type": "choice",
+            "options": ["Zdecydowanie tak", "Prawdopodobnie tak", "Nie wiem", "Raczej nie", "Zdecydowanie nie"]
+        },
+        {
+            "id": 5,
+            "text": "Co sądzisz o portfolio?",
+            "type": "text",
+            "placeholder": "Podziel się swoją opinią..."
         }
     ]
     return questions
 
 @app.post("/api/survey/submit")
 async def submit_survey(response: SurveyResponse):
-    """Save survey response and send to Kafka"""
+    """Zapisuje odpowiedź z ankiety i wysyła do Kafka"""
     
     with tracer.start_as_current_span("save-to-postgres"):
         try:
@@ -228,7 +253,7 @@ async def submit_survey(response: SurveyResponse):
             logger.info(f"Survey response saved to DB: {response.question} -> {response.answer}")
         except Exception as e:
             logger.error(f"Error saving survey response to DB: {e}")
-            raise HTTPException(status_code=500, detail="Error saving response to DB")
+            raise HTTPException(status_code=500, detail="Błąd podczas zapisywania odpowiedzi w DB")
 
     with tracer.start_as_current_span("send-to-kafka"):
         if KAFKA_PRODUCER:
@@ -238,7 +263,7 @@ async def submit_survey(response: SurveyResponse):
                 "timestamp": time.time()
             }
             try:
-                # Send message to topic
+                # Wysłanie wiadomości do topicu
                 KAFKA_PRODUCER.send('survey-topic', value=message)
                 logger.info(f"Message sent to Kafka topic 'survey-topic'")
             except Exception as e:
@@ -247,11 +272,12 @@ async def submit_survey(response: SurveyResponse):
         else:
             logger.warning("Kafka Producer is not initialized. Skipping message send.")
 
-    return {"status": "success", "message": "Thank you for completing the survey! (Saved and sent to Kafka)"}
+
+    return {"status": "success", "message": "Dziękujemy za wypełnienie ankiety! (Zapisano i wysłano do Kafka)"}
 
 @app.get("/api/survey/stats")
 async def get_survey_stats():
-    """Get survey statistics"""
+    # ... (Statystyki bez zmian)
     try:
         conn = get_db_connection()
         cur = conn.cursor()
@@ -283,11 +309,11 @@ async def get_survey_stats():
         }
     except Exception as e:
         logger.error(f"Error fetching survey stats: {e}")
-        raise HTTPException(status_code=500, detail="Error fetching statistics")
+        raise HTTPException(status_code=500, detail="Błąd podczas pobierania statystyk")
 
 @app.post("/api/contact")
 async def submit_contact(email: str = Form(...), message: str = Form(...)):
-    """Save contact message"""
+    """Zapisuje wiadomość kontaktową"""
     try:
         conn = get_db_connection()
         cur = conn.cursor()
@@ -299,14 +325,14 @@ async def submit_contact(email: str = Form(...), message: str = Form(...)):
         cur.close()
         conn.close()
         logger.info(f"Contact message saved from: {email}")
-        return {"status": "success", "message": "Message sent successfully!"}
+        return {"status": "success", "message": "Wiadomość została wysłana!"}
     except Exception as e:
         logger.error(f"Error saving contact message: {e}")
-        raise HTTPException(status_code=500, detail="Error sending message")
+        raise HTTPException(status_code=500, detail="Błąd podczas wysyłania wiadomości")
 
 @app.get("/api/visits")
 async def get_visit_stats():
-    """Get visit statistics"""
+    """Pobiera statystyki odwiedzin"""
     try:
         conn = get_db_connection()
         cur = conn.cursor()
@@ -335,7 +361,7 @@ async def get_visit_stats():
         }
     except Exception as e:
         logger.error(f"Error fetching visit stats: {e}")
-        raise HTTPException(status_code=500, detail="Error fetching visit statistics")
+        raise HTTPException(status_code=500, detail="Błąd podczas pobierania statystyk odwiedzin")
 
 if __name__ == "__main__":
     import uvicorn

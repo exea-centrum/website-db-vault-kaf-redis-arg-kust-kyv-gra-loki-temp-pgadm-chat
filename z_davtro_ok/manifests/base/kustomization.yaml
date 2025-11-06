@@ -1,0 +1,44 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: davtrowebdbvault
+
+resources:
+  - service-account.yaml
+  - configmap.yaml
+  - secret.yaml
+  - vault-config.yaml
+  - vault-deployment.yaml
+  - postgres.yaml
+  - pgadmin.yaml
+  - adminer.yaml           # DODANO: Adminer
+  - redis.yaml
+  - redis-commander.yaml   # DODANO: Redis UI
+  - kafka.yaml # Używamy tylko Kafki (KRaft)
+  - kafka-ui.yaml          # DODANO: Kafka UI
+  - deployment.yaml
+  - service.yaml
+  - ingress.yaml
+  - prometheus-config.yaml
+  - prometheus-deployment.yaml
+  - grafana-secret.yaml
+  - grafana-deployment.yaml
+  - loki-config.yaml
+  - loki-deployment.yaml
+  - promtail-config.yaml
+  - promtail-deployment.yaml
+  - tempo-config.yaml
+  - tempo-deployment.yaml
+  - kyverno-policy.yaml
+
+# Poprawiono: 'commonLabels' na 'labels'
+labels:
+- pairs:
+    app: website-db-stack
+    environment: development # KLUCZOWE DLA KYVERNO
+    managed-by: argocd
+
+images:
+  - name: ghcr.io/exea-centrum/website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
+    newName: ghcr.io/exea-centrum/website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui # Używamy nowej nazwy rejestru
+    newTag: latest

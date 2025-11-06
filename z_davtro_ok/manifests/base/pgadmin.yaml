@@ -1,0 +1,67 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pgadmin
+  namespace: davtrowebdbvault
+  labels:
+    app: pgadmin
+    environment: development
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: pgadmin
+  template:
+    metadata:
+      labels:
+        app: pgadmin
+        environment: development # KLUCZOWE DLA KYVERNO
+    spec:
+      initContainers:
+      - name: wait-for-db
+        image: postgres:14
+        command: 
+        - sh
+        - -c
+        - |
+          until pg_isready -h postgres -p 5432 -U appuser -d appdb; do
+            sleep 5
+          done
+        env:
+        - name: PGPASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: db-secret
+              key: postgres-password
+      containers:
+      - name: pgadmin
+        image: dpage/pgadmin4:latest
+        env:
+        - name: PGADMIN_DEFAULT_EMAIL
+          value: "admin@admin.com"
+        - name: PGADMIN_DEFAULT_PASSWORD
+          value: "admin"
+        ports:
+        - containerPort: 80
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "200m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pgadmin
+  namespace: davtrowebdbvault
+  labels:
+    app: pgadmin
+    environment: development
+spec:
+  selector:
+    app: pgadmin
+  ports:
+  - port: 80
+    targetPort: 80

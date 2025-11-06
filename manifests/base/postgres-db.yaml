@@ -1,0 +1,75 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-db
+  labels:
+    app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
+    component: postgres
+spec:
+  ports:
+  - port: 5432
+    name: postgres
+  selector:
+    app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
+    component: postgres
+  clusterIP: None
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres-db
+  labels:
+    app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
+    component: postgres
+spec:
+  serviceName: "postgres-db"
+  replicas: 1
+  selector:
+    matchLabels:
+      app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
+      component: postgres
+  template:
+    metadata:
+      labels:
+        app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
+        component: postgres
+    spec:
+      containers:
+      - name: postgres
+        image: postgres:15-alpine
+        ports:
+        - containerPort: 5432
+        env:
+          - name: POSTGRES_USER
+            value: "webuser"
+          - name: POSTGRES_PASSWORD
+            value: "testpassword"
+          - name: POSTGRES_DB
+            value: "webdb"
+        volumeMounts:
+        - name: postgres-storage
+          mountPath: /var/lib/postgresql/data
+          subPath: postgres-data
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "300m"
+          limits:
+            memory: "512Mi"
+            cpu: "750m"
+        livenessProbe:
+          exec:
+            command:
+            - sh
+            - -c
+            - exec pg_isready -U webuser -d webdb -h 127.0.0.1
+          initialDelaySeconds: 30
+          periodSeconds: 10
+  volumeClaimTemplates:
+  - metadata:
+      name: postgres-storage
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      resources:
+        requests:
+          storage: 10Gi

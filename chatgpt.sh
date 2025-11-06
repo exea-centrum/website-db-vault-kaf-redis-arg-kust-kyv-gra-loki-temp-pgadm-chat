@@ -1,17 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Unified deployment script - combines website app with full GitOps stack
-# Generates FastAPI app + Kubernetes manifests with ArgoCD, Vault, Postgres, Redis, Kafka (KRaft), Grafana, Prometheus, Loki, Tempo, Kyverno
+# Unified GitOps Stack Generator - FastAPI + Full Stack
+# Generates complete application with ArgoCD, Vault, Postgres, Redis, Kafka (KRaft), Grafana, Prometheus, Loki, Tempo, Kyverno
 
-# KRÓTSZA NAZWA PROJEKTU (NAPRAWA BŁĘDU INGRESS)
-PROJECT="website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui" 
-NAMESPACE="davtrowebdbvault"
+# PROJECT NAME - short and readable
+PROJECT="website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui"
+NAMESPACE="${PROJECT}-ns"
 ORG="exea-centrum"
 REGISTRY="ghcr.io/${ORG}/${PROJECT}"
-# REPO_URL MUSI BYĆ DOPASOWANY DO NOWEJ, KRÓTSZEJ NAZWY REPOZYTORIUM NA GITHUB!
-REPO_URL="https://github.com/${ORG}/${PROJECT}.git" 
-KAFKA_CLUSTER_ID="4mUj5vFk3tW7pY0iH2gR8qL6eD9oB1cZ" # Stały ID dla jedno-węzłowego KRaft
+REPO_URL="https://github.com/${ORG}/${PROJECT}.git"
+KAFKA_CLUSTER_ID="4mUj5vFk3tW7pY0iH2gR8qL6eD9oB1cZ" # Fixed ID for single-node KRaft
 
 ROOT_DIR="$(pwd)"
 APP_DIR="app"
@@ -23,20 +22,20 @@ info(){ echo -e "🔧 [unified] $*"; }
 mkdir_p(){ mkdir -p "$@"; }
 
 # ==============================
-# STRUKTURA KATALOGÓW
+# DIRECTORY STRUCTURE
 # ==============================
 generate_structure(){
-  info "Tworzenie struktury katalogów..."
-  mkdir_p "$APP_DIR/templates" "$BASE_DIR" "$WORKFLOW_DIR"
+  info "Creating directory structure..."
+  mkdir_p "$APP_DIR/templates" "$BASE_DIR" "$WORKFLOW_DIR" "static"
 }
 
 # ==============================
-# FASTAPI APLIKACJA
-# (Kod logiki bez zmian, jest poprawny)
+# FASTAPI APPLICATION
 # ==============================
 generate_fastapi_app(){
-  info "Generowanie FastAPI aplikacji z Kafka i Tracingiem..."
+  info "Generating FastAPI application with Kafka and Tracing..."
   
+  # main.py
   cat << 'EOF' > "$APP_DIR/main.py"
 from fastapi import FastAPI, Form, Request, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse
@@ -52,10 +51,10 @@ from typing import List, Dict, Any
 import time
 import json
 
-# Wymagane importy dla Kafka
+# Kafka imports
 from kafka import KafkaProducer
 
-# Wymagane importy dla OpenTelemetry
+# OpenTelemetry imports
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from opentelemetry.sdk.resources import Resource
 from opentelemetry import trace
@@ -63,13 +62,12 @@ from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
 
-
-app = FastAPI(title="Dawid Trojanowski - Strona Osobista")
+app = FastAPI(title="Dawid Trojanowski - Personal Website")
 templates = Jinja2Templates(directory="templates")
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("fastapi_app")
 
-# Konfiguracja CORS
+# CORS configuration
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -78,18 +76,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-DB_CONN = os.getenv("DATABASE_URL", "dbname=appdb user=appuser password=apppass host=postgres")
+DB_CONN = os.getenv("DATABASE_URL", "dbname=webdb user=webuser password=webpass host=postgres-db")
 KAFKA_SERVER = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka:9092")
 OTEL_ENDPOINT = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://tempo:4317")
-SERVICE_NAME = os.getenv("OTEL_SERVICE_NAME", "website-app")
-
+SERVICE_NAME = os.getenv("OTEL_SERVICE_NAME", "webstack-app")
 
 Instrumentator().instrument(app).expose(app)
 
 # ========================================================
-# 1. KONFIGURACJA TRACINGU (OpenTelemetry dla Tempo)
+# 1. TRACING CONFIGURATION (OpenTelemetry for Tempo)
 # ========================================================
-
 resource = Resource.create(attributes={
     "service.name": SERVICE_NAME
 })
@@ -99,21 +95,19 @@ trace.set_tracer_provider(
 )
 tracer = trace.get_tracer(__name__)
 
-# Konfiguracja eksportu do Tempo (OTLP over gRPC)
+# Configure export to Tempo (OTLP over gRPC)
 otlp_exporter = OTLPSpanExporter(endpoint=OTEL_ENDPOINT)
 span_processor = BatchSpanProcessor(otlp_exporter)
 trace.get_tracer_provider().add_span_processor(span_processor)
 
-# Instrumentacja FastAPI (automatyczne ślady)
+# FastAPI instrumentation (automatic traces)
 FastAPIInstrumentor.instrument_app(app, tracer_provider=trace.get_tracer_provider())
 
-
 # ========================================================
-# 2. KONFIGURACJA KAFKA
+# 2. KAFKA CONFIGURATION
 # ========================================================
-
 def get_kafka_producer():
-    """Inicjalizacja producenta Kafka."""
+    """Initialize Kafka producer."""
     try:
         producer = KafkaProducer(
             bootstrap_servers=KAFKA_SERVER.split(','),
@@ -128,13 +122,12 @@ def get_kafka_producer():
 
 KAFKA_PRODUCER = get_kafka_producer()
 
-
 class SurveyResponse(BaseModel):
     question: str
     answer: str
 
 def get_db_connection():
-    """Utwórz połączenie z bazą danych z retry logic"""
+    """Create database connection with retry logic"""
     max_retries = 30
     for attempt in range(max_retries):
         try:
@@ -149,14 +142,14 @@ def get_db_connection():
                 raise e
 
 def init_database():
-    """Inicjalizacja bazy danych"""
+    """Initialize database"""
     max_retries = 30
     for attempt in range(max_retries):
         try:
             conn = get_db_connection()
             cur = conn.cursor()
             
-            # Tabela odpowiedzi ankiet
+            # Survey responses table
             cur.execute("""
                 CREATE TABLE IF NOT EXISTS survey_responses(
                     id SERIAL PRIMARY KEY,
@@ -166,7 +159,7 @@ def init_database():
                 )
             """)
             
-            # Tabela odwiedzin stron
+            # Page visits table
             cur.execute("""
                 CREATE TABLE IF NOT EXISTS page_visits(
                     id SERIAL PRIMARY KEY,
@@ -175,7 +168,7 @@ def init_database():
                 )
             """)
             
-            # Tabela kontaktów
+            # Contact messages table
             cur.execute("""
                 CREATE TABLE IF NOT EXISTS contact_messages(
                     id SERIAL PRIMARY KEY,
@@ -207,10 +200,9 @@ async def shutdown_event():
         KAFKA_PRODUCER.close()
         logger.info("Kafka Producer closed.")
 
-
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request):
-    """Główna strona osobista"""
+    """Home page"""
     with tracer.start_as_current_span("db-log-visit"):
         try:
             conn = get_db_connection()
@@ -240,44 +232,26 @@ async def health_check():
 
 @app.get("/api/survey/questions")
 async def get_survey_questions():
-    """Pobiera listę pytań do ankiety"""
+    """Get survey questions"""
     questions = [
         {
             "id": 1,
-            "text": "Jak oceniasz design strony?",
+            "text": "How do you rate the website design?",
             "type": "rating",
-            "options": ["1 - Słabo", "2", "3", "4", "5 - Doskonale"]
+            "options": ["1 - Poor", "2", "3", "4", "5 - Excellent"]
         },
         {
             "id": 2,
-            "text": "Czy informacje były przydatne?",
+            "text": "Was the information helpful?",
             "type": "choice",
-            "options": ["Tak", "Raczej tak", "Nie wiem", "Raczej nie", "Nie"]
-        },
-        {
-            "id": 3,
-            "text": "Jakie technologie Cię zainteresowaƂy?",
-            "type": "multiselect",
-            "options": ["Python", "JavaScript", "React", "Kubernetes", "Docker", "PostgreSQL"]
-        },
-        {
-            "id": 4,
-            "text": "Czy poleciłbyś tę stronę innym?",
-            "type": "choice",
-            "options": ["Zdecydowanie tak", "Prawdopodobnie tak", "Nie wiem", "Raczej nie", "Zdecydowanie nie"]
-        },
-        {
-            "id": 5,
-            "text": "Co sądzisz o portfolio?",
-            "type": "text",
-            "placeholder": "Podziel się swoją opinią..."
+            "options": ["Yes", "Rather yes", "Don't know", "Rather no", "No"]
         }
     ]
     return questions
 
 @app.post("/api/survey/submit")
 async def submit_survey(response: SurveyResponse):
-    """Zapisuje odpowiedź z ankiety i wysyła do Kafka"""
+    """Save survey response and send to Kafka"""
     
     with tracer.start_as_current_span("save-to-postgres"):
         try:
@@ -293,7 +267,7 @@ async def submit_survey(response: SurveyResponse):
             logger.info(f"Survey response saved to DB: {response.question} -> {response.answer}")
         except Exception as e:
             logger.error(f"Error saving survey response to DB: {e}")
-            raise HTTPException(status_code=500, detail="Błąd podczas zapisywania odpowiedzi w DB")
+            raise HTTPException(status_code=500, detail="Error saving response to DB")
 
     with tracer.start_as_current_span("send-to-kafka"):
         if KAFKA_PRODUCER:
@@ -303,7 +277,7 @@ async def submit_survey(response: SurveyResponse):
                 "timestamp": time.time()
             }
             try:
-                # Wysłanie wiadomości do topicu
+                # Send message to topic
                 KAFKA_PRODUCER.send('survey-topic', value=message)
                 logger.info(f"Message sent to Kafka topic 'survey-topic'")
             except Exception as e:
@@ -312,12 +286,11 @@ async def submit_survey(response: SurveyResponse):
         else:
             logger.warning("Kafka Producer is not initialized. Skipping message send.")
 
-
-    return {"status": "success", "message": "Dziękujemy za wypełnienie ankiety! (Zapisano i wysłano do Kafka)"}
+    return {"status": "success", "message": "Thank you for completing the survey! (Saved and sent to Kafka)"}
 
 @app.get("/api/survey/stats")
 async def get_survey_stats():
-    # ... (Statystyki bez zmian)
+    """Get survey statistics"""
     try:
         conn = get_db_connection()
         cur = conn.cursor()
@@ -349,11 +322,11 @@ async def get_survey_stats():
         }
     except Exception as e:
         logger.error(f"Error fetching survey stats: {e}")
-        raise HTTPException(status_code=500, detail="Błąd podczas pobierania statystyk")
+        raise HTTPException(status_code=500, detail="Error fetching statistics")
 
 @app.post("/api/contact")
 async def submit_contact(email: str = Form(...), message: str = Form(...)):
-    """Zapisuje wiadomość kontaktową"""
+    """Save contact message"""
     try:
         conn = get_db_connection()
         cur = conn.cursor()
@@ -365,14 +338,14 @@ async def submit_contact(email: str = Form(...), message: str = Form(...)):
         cur.close()
         conn.close()
         logger.info(f"Contact message saved from: {email}")
-        return {"status": "success", "message": "Wiadomość została wysłana!"}
+        return {"status": "success", "message": "Message sent successfully!"}
     except Exception as e:
         logger.error(f"Error saving contact message: {e}")
-        raise HTTPException(status_code=500, detail="Błąd podczas wysyłania wiadomości")
+        raise HTTPException(status_code=500, detail="Error sending message")
 
 @app.get("/api/visits")
 async def get_visit_stats():
-    """Pobiera statystyki odwiedzin"""
+    """Get visit statistics"""
     try:
         conn = get_db_connection()
         cur = conn.cursor()
@@ -401,13 +374,14 @@ async def get_visit_stats():
         }
     except Exception as e:
         logger.error(f"Error fetching visit stats: {e}")
-        raise HTTPException(status_code=500, detail="Błąd podczas pobierania statystyk odwiedzin")
+        raise HTTPException(status_code=500, detail="Error fetching visit statistics")
 
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
 EOF
 
+  # requirements.txt
   cat << 'EOF' > "$APP_DIR/requirements.txt"
 fastapi==0.104.1
 uvicorn==0.24.0
@@ -424,18 +398,15 @@ opentelemetry-exporter-otlp==1.22.0
 EOF
 }
 
-# ==============================
-# HTML TEMPLATE
-# ==============================
 generate_html_template(){
-  info "Generowanie szablonu HTML..."
+  info "Generating HTML template..."
   cat << 'HTMLEOF' > "$APP_DIR/templates/index.html"
 <!DOCTYPE html>
 <html lang="pl">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dawid Trojanowski - Strona Osobista</title>
+    <title>Dawid Trojanowski - Personal Website</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
@@ -449,9 +420,9 @@ generate_html_template(){
     </header>
     <main class="container mx-auto px-6 py-12">
         <div class="bg-gradient-to-br from-purple-500/10 to-pink-500/10 backdrop-blur-lg border border-purple-500/20 rounded-2xl p-8">
-            <h2 class="text-4xl font-bold mb-6 text-purple-300">O Mnie</h2>
+            <h2 class="text-4xl font-bold mb-6 text-purple-300">About Me</h2>
             <p class="text-lg text-gray-300 leading-relaxed">
-                Cześć! Jestem Dawidem Trojanowskim, pasjonatem informatyki i nowych technologii.
+                Hello! I'm Dawid Trojanowski, passionate about IT and new technologies.
             </p>
         </div>
     </main>
@@ -469,20 +440,27 @@ HTMLEOF
 # DOCKERFILE
 # ==============================
 generate_dockerfile(){
-  info "Generowanie Dockerfile..."
-  cat << 'EOF' > "${ROOT_DIR}/Dockerfile"
-FROM python:3.10-slim
+  info "Generating Dockerfile..."
+  cat << EOF > "${ROOT_DIR}/Dockerfile"
+FROM python:3.11-slim-bullseye
 
 WORKDIR /app
 
+# Environment variables
+ENV PYTHONDONTWRITEBYTECODE 1
+ENV PYTHONUNBUFFERED 1
+
+# Copy dependencies
 COPY app/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY app/ .
+# Copy application code
+COPY ./app /app/app
+COPY ./static /app/static
+COPY ./templates /app/templates
 
-ENV PYTHONUNBUFFERED=1
-
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Start application
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
 EOF
 }
 
@@ -490,165 +468,124 @@ EOF
 # GITHUB ACTIONS
 # ==============================
 generate_github_actions(){
-  info "Generowanie GitHub Actions workflow..."
-  cat > "${WORKFLOW_DIR}/ci.yml" <<GHA
-name: CI/CD Build & Deploy
+  info "Generating GitHub Actions workflow..."
+  cat << EOF > "$WORKFLOW_DIR/ci-cd.yaml"
+name: CI/CD Pipeline
 
 on:
   push:
-    branches: [ "main" ]
-  workflow_dispatch:
-
-permissions:
-  contents: read
-  packages: write
+    branches:
+      - main
+    paths:
+      - 'app/**'
+      - 'Dockerfile'
+      - 'requirements.txt'
 
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
-      
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v2
-      
-      - name: Set up Buildx
-        uses: docker/setup-buildx-action@v2
-      
-      - name: Log in to GHCR
-        uses: docker/login-action@v2
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
         with:
           registry: ghcr.io
-          username: \${{ github.actor }}
-          password: \${{ secrets.GHCR_PAT }}
-      
-      - name: Build and push image
-        uses: docker/build-push-action@v4
+          username: \${{ github.repository_owner }}
+          password: \${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
         with:
           context: .
+          file: ./Dockerfile
           push: true
-          tags: |
-            ${REGISTRY}:latest
-            ${REGISTRY}:\${{ github.sha }}
-          cache-from: type=registry,ref=${REGISTRY}:latest
+          tags: $REGISTRY:latest
+          cache-from: type=registry,ref=$REGISTRY:latest
           cache-to: type=inline
-GHA
+EOF
 }
 
 # ==============================
-# KUBERNETES MANIFESTS (BASE)
+# KUBERNETES MANIFESTS
 # ==============================
+
+# 1. Main Application
 generate_k8s_base(){
-  info "Generowanie podstawowych manifestów Kubernetes..."
-  
-  # ConfigMap
-  cat > "${BASE_DIR}/configmap.yaml" <<EOF
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: ${PROJECT}-config
-  namespace: ${NAMESPACE}
-data:
-  DATABASE_URL: "dbname=appdb user=appuser password=apppass host=postgres"
-EOF
-
-  # Secret
-  cat > "${BASE_DIR}/secret.yaml" <<EOF
-apiVersion: v1
-kind: Secret
-metadata:
-  name: db-secret
-  namespace: ${NAMESPACE}
-type: Opaque
-stringData:
-  postgres-password: "apppass"
-  username: "appuser"
-  password: "apppass"
-EOF
-
-  # Service Account
-  cat > "${BASE_DIR}/service-account.yaml" <<EOF
-apiVersion: v1
-kind: ServiceAccount
-metadata:
-  name: ${PROJECT}
-  namespace: ${NAMESPACE}
-imagePullSecrets:
-  - name: ghcr-pull-secret
-EOF
-
-  # App Deployment (Ujednolicono etykiety)
-  cat > "${BASE_DIR}/deployment.yaml" <<EOF
+  info "Generating app-deployment.yaml..."
+  cat << EOF > "$BASE_DIR/app-deployment.yaml"
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: ${PROJECT}
-  namespace: ${NAMESPACE}
+  name: fastapi-web-app
   labels:
-    app: ${PROJECT}
-    environment: development
+    app: $PROJECT
+    component: fastapi
 spec:
   replicas: 2
   selector:
     matchLabels:
-      app: ${PROJECT}
+      app: $PROJECT
+      component: fastapi
   template:
     metadata:
       labels:
-        app: ${PROJECT}
-        environment: development # KLUCZOWE DLA KYVERNO
+        app: $PROJECT
+        component: fastapi
       annotations:
-        prometheus.io/scrape: "true"
-        prometheus.io/port: "8000"
-        prometheus.io/path: "/metrics"
+        vault.hashicorp.com/agent-inject: "true"
+        vault.hashicorp.com/role: "web-app-role"
+        vault.hashicorp.com/agent-inject-status: "update"
+        vault.hashicorp.com/secret-volume-path: "/vault/secrets"
+        vault.hashicorp.com/agent-inject-secret-db-creds: "secret/data/database/postgres"
+        vault.hashicorp.com/agent-inject-template-db-creds: |
+          {{- with secret "secret/data/database/postgres" -}}
+          export POSTGRES_USER="{{ .Data.data.postgres-user }}"
+          export POSTGRES_PASSWORD="{{ .Data.data.postgres-password }}"
+          export POSTGRES_HOST="{{ .Data.data.postgres-host }}"
+          export POSTGRES_DB="{{ .Data.data.postgres-db }}"
+          {{- end -}}
     spec:
-      serviceAccountName: ${PROJECT}
+      serviceAccountName: fastapi-sa
       initContainers:
       - name: wait-for-db
-        image: postgres:14
+        image: postgres:15-alpine
         command: 
         - sh
         - -c
         - |
-          echo "Waiting for database..."
-          # Używamy nowej, krótszej nazwy PROJECT do czekania na POSTGRES
-          until pg_isready -h postgres -p 5432 -U appuser -d appdb; do
+          until pg_isready -h postgres-db -p 5432 -U webuser -d webdb; do
             echo "Database not ready. Waiting..."
             sleep 5
           done
           echo "Database ready!"
         env:
         - name: PGPASSWORD
-          valueFrom:
-            secretKeyRef:
-              name: db-secret
-              key: postgres-password
+          value: "testpassword"
       containers:
       - name: app
-        image: ${REGISTRY}:latest
+        image: $REGISTRY:latest
         ports:
         - containerPort: 8000
         env:
-        - name: DATABASE_URL
-          valueFrom:
-            configMapKeyRef:
-              name: ${PROJECT}-config
-              key: DATABASE_URL
-        # KONFIGURACJA KAFKA (KRaft)
-        - name: KAFKA_BOOTSTRAP_SERVERS
-          value: kafka:9092
-        # KONFIGURACJA TRACINGU DLA TEMPO (OTLP)
-        - name: OTEL_SERVICE_NAME
-          value: ${PROJECT}-fastapi
-        - name: OTEL_EXPORTER_OTLP_ENDPOINT
-          value: http://tempo:4317
-        - name: OTEL_EXPORTER_OTLP_PROTOCOL
-          value: grpc
+          - name: VAULT_ADDR
+            value: "http://vault:8200"
+          - name: APP_NAME
+            value: "$PROJECT"
+          - name: KAFKA_BOOTSTRAP_SERVERS
+            value: "kafka:9092"
+          - name: OTEL_SERVICE_NAME
+            value: "$PROJECT-fastapi"
+          - name: OTEL_EXPORTER_OTLP_ENDPOINT
+            value: "http://tempo:4317"
         resources:
           requests:
             memory: "256Mi"
-            cpu: "100m"
+            cpu: "200m"
           limits:
             memory: "512Mi"
             cpu: "500m"
@@ -656,1002 +593,736 @@ spec:
           httpGet:
             path: /health
             port: 8000
-          initialDelaySeconds: 90
+          initialDelaySeconds: 30
           periodSeconds: 10
         readinessProbe:
           httpGet:
             path: /health
             port: 8000
-          initialDelaySeconds: 60
+          initialDelaySeconds: 5
           periodSeconds: 5
-EOF
-
-  # Service
-  cat > "${BASE_DIR}/service.yaml" <<EOF
+---
 apiVersion: v1
 kind: Service
 metadata:
-  name: ${PROJECT}
-  namespace: ${NAMESPACE}
+  name: fastapi-web-service
   labels:
-    app: ${PROJECT}
-    environment: development
+    app: $PROJECT
+    component: fastapi
 spec:
-  selector:
-    app: ${PROJECT}
-  ports:
-    - port: 80
-      targetPort: 8000
-      protocol: TCP
   type: ClusterIP
-EOF
-
-  # Ingress (NAPRAWA BŁĘDU DŁUGIEJ NAZWY I UPROSZCZENIE HOSTÓW)
-  cat > "${BASE_DIR}/ingress.yaml" <<EOF
-apiVersion: networking.k8s.io/v1
-kind: Ingress
+  ports:
+  - port: 80
+    targetPort: 8000
+    protocol: TCP
+  selector:
+    app: $PROJECT
+    component: fastapi
+---
+apiVersion: v1
+kind: ServiceAccount
 metadata:
-  name: ${PROJECT}-ui-ingress
-  namespace: ${NAMESPACE}
-  annotations:
-    nginx.ingress.kubernetes.io/rewrite-target: /
-    # nginx.ingress.kubernetes.io/ssl-redirect: "false" # Opcjonalne
-  labels: 
-    app: ${PROJECT}
-    environment: development
-spec:
-  rules:
-  # 1. APLIKACJA GŁÓWNA
-  - host: app.${PROJECT}.local
-    http:
-      paths:
-      - path: /
-        pathType: Prefix
-        backend:
-          service:
-            name: ${PROJECT}
-            port:
-              number: 80
-              
-  # 2. PGADMIN
-  - host: pgadmin.${PROJECT}.local
-    http:
-      paths:
-      - path: /
-        pathType: Prefix
-        backend:
-          service:
-            name: pgadmin
-            port:
-              number: 80 # pgadmin service port
-              
-  # 3. ADMINER
-  - host: adminer.${PROJECT}.local
-    http:
-      paths:
-      - path: /
-        pathType: Prefix
-        backend:
-          service:
-            name: adminer
-            port:
-              number: 8080 # adminer service port
-              
-  # 4. KAFKA UI (Kafka-UI)
-  - host: kafka-ui.${PROJECT}.local
-    http:
-      paths:
-      - path: /
-        pathType: Prefix
-        backend:
-          service:
-            name: kafka-ui
-            port:
-              number: 8080 # kafka-ui service port
-              
-  # 5. REDIS COMMANDER (UI)
-  - host: redis-ui.${PROJECT}.local
-    http:
-      paths:
-      - path: /
-        pathType: Prefix
-        backend:
-          service:
-            name: redis-commander
-            port:
-              number: 8081 # redis-commander service port
-              
-  # 6. GRAFANA
-  - host: grafana.${PROJECT}.local
-    http:
-      paths:
-      - path: /
-        pathType: Prefix
-        backend:
-          service:
-            name: grafana
-            port:
-              number: 3000 # grafana service port
-              
-  # 7. PROMETHEUS
-  - host: prometheus.${PROJECT}.local
-    http:
-      paths:
-      - path: /
-        pathType: Prefix
-        backend:
-          service:
-            name: prometheus
-            port:
-              number: 9090 # prometheus service port
-              
-  # 8. LOKI
-  - host: loki.${PROJECT}.local
-    http:
-      paths:
-      - path: /
-        pathType: Prefix
-        backend:
-          service:
-            name: loki
-            port:
-              number: 3100 # loki service port
-              
-  # 9. VAULT
-  - host: vault.${PROJECT}.local
-    http:
-      paths:
-      - path: /
-        pathType: Prefix
-        backend:
-          service:
-            name: vault
-            port:
-              number: 8200 # vault service port
-              
-  # 10. TEMPO (UI/Query Frontend)
-  - host: tempo.${PROJECT}.local
-    http:
-      paths:
-      - path: /
-        pathType: Prefix
-        backend:
-          service:
-            name: tempo
-            port:
-              number: 3200 # tempo service port
+  name: fastapi-sa
+  labels:
+    app: $PROJECT
+    component: fastapi
 EOF
 }
 
-# ==============================
-# POSTGRES (Ujednolicono etykiety)
-# ==============================
+# 2. PostgreSQL Database
 generate_postgres(){
-  info "Generowanie PostgreSQL..."
-  cat > "${BASE_DIR}/postgres.yaml" <<EOF
+  info "Generating postgres-db.yaml..."
+  cat << EOF > "$BASE_DIR/postgres-db.yaml"
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-db
+  labels:
+    app: $PROJECT
+    component: postgres
+spec:
+  ports:
+  - port: 5432
+    name: postgres
+  selector:
+    app: $PROJECT
+    component: postgres
+  clusterIP: None
+---
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  name: postgres
-  namespace: ${NAMESPACE}
+  name: postgres-db
   labels:
-    app: postgres
-    environment: development
+    app: $PROJECT
+    component: postgres
 spec:
-  serviceName: postgres
+  serviceName: "postgres-db"
   replicas: 1
   selector:
     matchLabels:
-      app: postgres
+      app: $PROJECT
+      component: postgres
   template:
     metadata:
       labels:
-        app: postgres
-        environment: development # KLUCZOWE DLA KYVERNO
+        app: $PROJECT
+        component: postgres
     spec:
       containers:
       - name: postgres
-        image: postgres:14
-        env:
-        - name: POSTGRES_DB
-          value: appdb
-        - name: POSTGRES_USER
-          value: appuser
-        - name: POSTGRES_PASSWORD
-          valueFrom:
-            secretKeyRef:
-              name: db-secret
-              key: postgres-password
+        image: postgres:15-alpine
         ports:
         - containerPort: 5432
+        env:
+          - name: POSTGRES_USER
+            value: "webuser"
+          - name: POSTGRES_PASSWORD
+            value: "testpassword"
+          - name: POSTGRES_DB
+            value: "webdb"
         volumeMounts:
-        - name: postgres-data
+        - name: postgres-storage
           mountPath: /var/lib/postgresql/data
+          subPath: postgres-data
         resources:
           requests:
-            memory: "512Mi"
-            cpu: "200m"
+            memory: "256Mi"
+            cpu: "300m"
           limits:
-            memory: "1Gi"
-            cpu: "500m"
+            memory: "512Mi"
+            cpu: "750m"
         livenessProbe:
           exec:
             command:
             - sh
             - -c
-            - exec pg_isready -U appuser -d appdb -h 127.0.0.1
+            - exec pg_isready -U webuser -d webdb -h 127.0.0.1
           initialDelaySeconds: 30
           periodSeconds: 10
   volumeClaimTemplates:
   - metadata:
-      name: postgres-data
+      name: postgres-storage
     spec:
-      accessModes: ["ReadWriteOnce"]
+      accessModes: [ "ReadWriteOnce" ]
       resources:
         requests:
           storage: 10Gi
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: postgres
-  namespace: ${NAMESPACE}
-  labels:
-    app: postgres
-    environment: development
-spec:
-  selector:
-    app: postgres
-  ports:
-  - port: 5432
-    targetPort: 5432
-  type: ClusterIP
 EOF
 }
 
-# ==============================
-# PGADMIN (Ujednolicono etykiety)
-# ==============================
+# 3. pgAdmin
 generate_pgadmin(){
-  info "Generowanie pgAdmin..."
-  cat > "${BASE_DIR}/pgadmin.yaml" <<EOF
+  info "Generating pgadmin.yaml..."
+  cat << EOF > "$BASE_DIR/pgadmin.yaml"
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: pgadmin
-  namespace: ${NAMESPACE}
   labels:
-    app: pgadmin
-    environment: development
+    app: $PROJECT
+    component: pgadmin
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: pgadmin
+      app: $PROJECT
+      component: pgadmin
   template:
     metadata:
       labels:
-        app: pgadmin
-        environment: development # KLUCZOWE DLA KYVERNO
+        app: $PROJECT
+        component: pgadmin
     spec:
       initContainers:
       - name: wait-for-db
-        image: postgres:14
+        image: postgres:15-alpine
         command: 
         - sh
         - -c
         - |
-          until pg_isready -h postgres -p 5432 -U appuser -d appdb; do
+          until pg_isready -h postgres-db -p 5432 -U webuser -d webdb; do
             sleep 5
           done
         env:
         - name: PGPASSWORD
-          valueFrom:
-            secretKeyRef:
-              name: db-secret
-              key: postgres-password
+          value: "testpassword"
       containers:
       - name: pgadmin
         image: dpage/pgadmin4:latest
-        env:
-        - name: PGADMIN_DEFAULT_EMAIL
-          value: "admin@admin.com"
-        - name: PGADMIN_DEFAULT_PASSWORD
-          value: "admin"
         ports:
         - containerPort: 80
+        env:
+          - name: PGADMIN_DEFAULT_EMAIL
+            value: "admin@webstack.local"
+          - name: PGADMIN_DEFAULT_PASSWORD
+            value: "adminpassword"
+          - name: PGADMIN_LISTEN_PORT
+            value: "80"
+          - name: PGADMIN_LISTEN_ADDRESS
+            value: "0.0.0.0"
         resources:
           requests:
-            memory: "256Mi"
+            memory: "128Mi"
             cpu: "100m"
           limits:
-            memory: "512Mi"
+            memory: "256Mi"
             cpu: "200m"
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: pgadmin
-  namespace: ${NAMESPACE}
+  name: pgadmin-service
   labels:
-    app: pgadmin
-    environment: development
+    app: $PROJECT
+    component: pgadmin
 spec:
-  selector:
-    app: pgadmin
+  type: ClusterIP
   ports:
   - port: 80
     targetPort: 80
+    protocol: TCP
+  selector:
+    app: $PROJECT
+    component: pgadmin
 EOF
 }
 
-# ==============================
-# ADMINER (NOWA FUNKCJA)
-# ==============================
-generate_adminer(){
-  info "Generowanie Adminer..."
-  cat > "${BASE_DIR}/adminer.yaml" <<EOF
+# 4. Vault
+generate_vault(){
+  info "Generating vault.yaml..."
+  cat << EOF > "$BASE_DIR/vault.yaml"
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: vault-sa
+  labels:
+    app: $PROJECT
+    component: vault
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vault
+  labels:
+    app: $PROJECT
+    component: vault
+spec:
+  clusterIP: None
+  ports:
+  - name: http
+    port: 8200
+  selector:
+    app: $PROJECT
+    component: vault
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: vault
+  labels:
+    app: $PROJECT
+    component: vault
+spec:
+  serviceName: "vault"
+  replicas: 1
+  selector:
+    matchLabels:
+      app: $PROJECT
+      component: vault
+  template:
+    metadata:
+      labels:
+        app: $PROJECT
+        component: vault
+    spec:
+      serviceAccountName: vault-sa
+      containers:
+      - name: vault
+        image: hashicorp/vault:1.15.0
+        ports:
+        - containerPort: 8200
+        env:
+          - name: VAULT_LOCAL_CONFIG
+            value: |
+              listener "tcp" {
+                address = "0.0.0.0:8200"
+                cluster_address = "0.0.0.0:8201"
+                tls_disable = "true"
+              }
+              storage "file" {
+                path = "/vault/file"
+              }
+              disable_mlock = true
+              ui = true
+        volumeMounts:
+        - name: vault-storage
+          mountPath: /vault/file
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "500m"
+          limits:
+            memory: "1024Mi"
+            cpu: "1000m"
+  volumeClaimTemplates:
+  - metadata:
+      name: vault-storage
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      resources:
+        requests:
+          storage: 1Gi
+EOF
+}
+
+# 5. Redis
+generate_redis(){
+  info "Generating redis.yaml..."
+  cat << EOF > "$BASE_DIR/redis.yaml"
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: adminer
-  namespace: ${NAMESPACE}
-  labels:
-    app: adminer
-    environment: development
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: adminer
-  template:
-    metadata:
-      labels:
-        app: adminer
-        environment: development
-    spec:
-      containers:
-      - name: adminer
-        image: adminer:latest
-        ports:
-        - containerPort: 8080
-        resources:
-          requests:
-            memory: "128Mi"
-            cpu: "50m"
-          limits:
-            memory: "256Mi"
-            cpu: "100m"
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: adminer
-  namespace: ${NAMESPACE}
-  labels:
-    app: adminer
-    environment: development
-spec:
-  selector:
-    app: adminer
-  ports:
-  - port: 8080
-    targetPort: 8080
-  type: ClusterIP
-EOF
-}
-
-# ==============================
-# VAULT (Ujednolicono etykiety, stabilna konfiguracja)
-# ==============================
-generate_vault(){
-  info "Generowanie Vault..."
-  cat > "${BASE_DIR}/vault-config.yaml" <<VC
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: vault-config
-  namespace: ${NAMESPACE}
-data:
-  vault.hcl: |
-    storage "file" {
-      path = "/vault/data"
-    }
-    listener "tcp" {
-      address = "0.0.0.0:8200"
-      tls_disable = "true"
-    }
-    ui = true
-    disable_mlock = "true" # Poprawka błędu restartu w deweloperskim klastrze
-VC
-
-  cat > "${BASE_DIR}/vault-deployment.yaml" <<VD
-apiVersion: apps/v1
-kind: StatefulSet
-metadata:
-  name: vault
-  namespace: ${NAMESPACE}
-  labels:
-    app: vault
-    environment: development
-spec:
-  serviceName: vault
-  replicas: 1
-  selector:
-    matchLabels:
-      app: vault
-  template:
-    metadata:
-      labels:
-        app: vault
-        environment: development # KLUCZOWE DLA KYVERNO
-    spec:
-      containers:
-      - name: vault
-        image: hashicorp/vault:1.15.3
-        args: ["server","-config=/vault/config/vault.hcl"]
-        ports:
-        - containerPort: 8200
-        volumeMounts:
-        - name: vault-config
-          mountPath: /vault/config
-        - name: vault-data
-          mountPath: /vault/data
-      volumes:
-      - name: vault-config
-        configMap:
-          name: vault-config
-  volumeClaimTemplates:
-  - metadata:
-      name: vault-data
-    spec:
-      accessModes: ["ReadWriteOnce"]
-      resources:
-        requests:
-          storage: 10Gi
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: vault
-  namespace: ${NAMESPACE}
-  labels:
-    app: vault
-    environment: development
-spec:
-  ports:
-  - port: 8200
-  selector:
-    app: vault
-VD
-}
-
-# ==============================
-# REDIS (Ujednolicono etykiety)
-# ==============================
-generate_redis(){
-  info "Generowanie Redis..."
-  cat > "${BASE_DIR}/redis.yaml" <<R
-apiVersion: apps/v1
-kind: StatefulSet
-metadata:
   name: redis
-  namespace: ${NAMESPACE}
   labels:
-    app: redis
-    environment: development
+    app: $PROJECT
+    component: redis
 spec:
-  serviceName: redis
   replicas: 1
   selector:
     matchLabels:
-      app: redis
+      app: $PROJECT
+      component: redis
   template:
     metadata:
       labels:
-        app: redis
-        environment: development # KLUCZOWE DLA KYVERNO
+        app: $PROJECT
+        component: redis
     spec:
       containers:
       - name: redis
-        image: redis:7
+        image: redis:7-alpine
         ports:
         - containerPort: 6379
-        args: ["--appendonly", "yes"]
-        volumeMounts:
-        - name: redis-data
-          mountPath: /data
-  volumeClaimTemplates:
-  - metadata:
-      name: redis-data
-    spec:
-      accessModes: ["ReadWriteOnce"]
-      resources:
-        requests:
-          storage: 5Gi
+        command: ["redis-server", "--appendonly", "yes"]
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
 ---
 apiVersion: v1
 kind: Service
 metadata:
   name: redis
-  namespace: ${NAMESPACE}
   labels:
-    app: redis
-    environment: development
+    app: $PROJECT
+    component: redis
 spec:
-  ports:
-  - port: 6379
-  selector:
-    app: redis
-R
-}
-
-# ==============================
-# REDIS COMMANDER (NOWA FUNKCJA)
-# ==============================
-generate_redis_ui(){
-  info "Generowanie Redis Commander (UI)..."
-  cat > "${BASE_DIR}/redis-commander.yaml" <<EOF
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: redis-commander
-  namespace: ${NAMESPACE}
-  labels:
-    app: redis-commander
-    environment: development
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: redis-commander
-  template:
-    metadata:
-      labels:
-        app: redis-commander
-        environment: development
-    spec:
-      containers:
-      - name: redis-commander
-        image: rediscommander/redis-commander:latest
-        ports:
-        - containerPort: 8081
-        env:
-        # Hosty Redisa: nazwa serwisu Redis i jego port
-        - name: REDIS_HOSTS
-          value: "redis:6379"
-        # Opcjonalne podstawowe zabezpieczenie UI
-        - name: HTTP_USER
-          value: "admin"
-        - name: HTTP_PASSWORD
-          value: "admin"
-        resources:
-          requests:
-            memory: "128Mi"
-            cpu: "50m"
-          limits:
-            memory: "256Mi"
-            cpu: "100m"
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: redis-commander
-  namespace: ${NAMESPACE}
-  labels:
-    app: redis-commander
-    environment: development
-spec:
-  selector:
-    app: redis-commander
-  ports:
-  - port: 8081
-    targetPort: 8081
   type: ClusterIP
+  ports:
+    - port: 6379
+      targetPort: 6379
+      protocol: TCP
+  selector:
+    app: $PROJECT
+    component: redis
 EOF
 }
 
-# ==============================
-# KAFKA (NAPRAWA: Wdrożenie Kafka KRaft - bez Zookeepera)
-# ==============================
+# 6. Kafka KRaft
 generate_kafka(){
-  info "Generowanie Kafka KRaft (bez Zookeepera)..."
-  
-  cat > "${BASE_DIR}/kafka.yaml" <<KAF
+  info "Generating kafka-kraft.yaml..."
+  cat << EOF > "$BASE_DIR/kafka-kraft.yaml"
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka
+  labels:
+    app: $PROJECT
+    component: kafka
+spec:
+  ports:
+  - port: 9092
+    name: client
+  - port: 9093
+    name: inter-broker
+  selector:
+    app: $PROJECT
+    component: kafka
+  clusterIP: None
+---
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: kafka
-  namespace: ${NAMESPACE}
   labels:
-    app: kafka
-    environment: development
+    app: $PROJECT
+    component: kafka
 spec:
-  serviceName: kafka
+  serviceName: "kafka"
   replicas: 1
   selector:
     matchLabels:
-      app: kafka
+      app: $PROJECT
+      component: kafka
   template:
     metadata:
       labels:
-        app: kafka
-        environment: development # KLUCZOWE DLA KYVERNO
+        app: $PROJECT
+        component: kafka
     spec:
       containers:
       - name: kafka
-        image: apache/kafka:3.7.0 # ZMIENIONY OBRAZ (Rozwiązanie ImagePullBackOff)
-        env:
-        # 1. Konfiguracja KRaft
-        - name: KAFKA_CFG_NODE_ID
-          value: "1"
-        - name: KAFKA_CFG_PROCESS_ROLES
-          value: "controller,broker"
-        - name: KAFKA_CFG_CONTROLLER_QUORUM_VOTERS
-          value: "1@kafka:9093"
-        - name: KAFKA_CFG_CONTROLLER_LISTENER_NAMES
-          value: "CONTROLLER"
-        - name: KAFKA_CFG_CLUSTER_ID
-          value: "${KAFKA_CLUSTER_ID}"
-        # 2. Konfiguracja Listanerów
-        - name: KAFKA_CFG_LISTENERS
-          value: "PLAINTEXT://:9092,CONTROLLER://:9093"
-        - name: KAFKA_CFG_ADVERTISED_LISTENERS
-          value: "PLAINTEXT://kafka:9092"
-        - name: KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP
-          value: "CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT"
-        - name: KAFKA_CFG_LOG_DIRS
-          value: "/tmp/kraft-storage"
+        image: bitnami/kafka:3.6.1
         ports:
         - containerPort: 9092
-        - containerPort: 9093 # Kontroler
+          name: client
+        - containerPort: 9093
+          name: inter-broker
+        env:
+          - name: KAFKA_CFG_NODE_ID
+            value: "1"
+          - name: KAFKA_CFG_PROCESS_ROLES
+            value: "controller,broker"
+          - name: KAFKA_CFG_CONTROLLER_QUORUM_VOTERS
+            value: "1@kafka:9093"
+          - name: KAFKA_CFG_LISTENERS
+            value: "CLIENT://:9092, INTERNAL://:9093"
+          - name: KAFKA_CFG_ADVERTISED_LISTENERS
+            value: "CLIENT://kafka:9092, INTERNAL://kafka:9093"
+          - name: KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP
+            value: "CLIENT:PLAINTEXT, INTERNAL:PLAINTEXT"
+          - name: KAFKA_CFG_CONTROLLER_LISTENER_NAMES
+            value: "INTERNAL"
+          - name: KAFKA_CFG_KRAFT_CLUSTER_ID
+            value: "${KAFKA_CLUSTER_ID}"
+          - name: KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE
+            value: "true"
         volumeMounts:
         - name: kafka-data
-          mountPath: /tmp/kraft-storage
+          mountPath: /bitnami/kafka/data
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "500m"
+          limits:
+            memory: "1024Mi"
+            cpu: "1000m"
   volumeClaimTemplates:
   - metadata:
       name: kafka-data
     spec:
-      accessModes: ["ReadWriteOnce"]
+      accessModes: [ "ReadWriteOnce" ]
       resources:
         requests:
-          storage: 20Gi
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: kafka
-  namespace: ${NAMESPACE}
-  labels:
-    app: kafka
-    environment: development
-spec:
-  ports:
-  - port: 9092
-    targetPort: 9092
-    name: plaintext
-  - port: 9093
-    targetPort: 9093
-    name: controller
-  selector:
-    app: kafka
-KAF
-}
-
-# ==============================
-# KAFKA UI (NOWA FUNKCJA)
-# ==============================
-generate_kafka_ui(){
-  info "Generowanie Kafka UI..."
-  cat > "${BASE_DIR}/kafka-ui.yaml" <<EOF
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: kafka-ui
-  namespace: ${NAMESPACE}
-  labels:
-    app: kafka-ui
-    environment: development
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: kafka-ui
-  template:
-    metadata:
-      labels:
-        app: kafka-ui
-        environment: development
-    spec:
-      containers:
-      - name: kafka-ui
-        image: provectuslabs/kafka-ui:latest
-        ports:
-        - containerPort: 8080
-        env:
-        # Konfiguracja połączenia z klastrem Kafka
-        - name: KAFKA_CLUSTERS_0_NAME
-          value: "local-kafka"
-        - name: KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS
-          value: "kafka:9092"
-        # Umożliwienie dynamicznej konfiguracji przez UI
-        - name: DYNAMIC_CONFIG_ENABLED
-          value: "true"
-        resources:
-          requests:
-            memory: "256Mi"
-            cpu: "100m"
-          limits:
-            memory: "512Mi"
-            cpu: "200m"
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: kafka-ui
-  namespace: ${NAMESPACE}
-  labels:
-    app: kafka-ui
-    environment: development
-spec:
-  selector:
-    app: kafka-ui
-  ports:
-  - port: 8080
-    targetPort: 8080
-  type: ClusterIP
+          storage: 10Gi
 EOF
 }
 
-# ==============================
-# PROMETHEUS (Ujednolicono etykiety)
-# ==============================
+# 7. Monitoring Stack
 generate_prometheus(){
-  info "Generowanie Prometheus..."
-  cat > "${BASE_DIR}/prometheus-config.yaml" <<PC
+  info "Generating prometheus.yaml..."
+  cat << EOF > "$BASE_DIR/prometheus-config.yaml"
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: prometheus-config
-  namespace: ${NAMESPACE}
+  labels:
+    app: $PROJECT
+    component: prometheus
 data:
   prometheus.yml: |
     global:
       scrape_interval: 15s
-    scrape_configs:
-      - job_name: 'fastapi'
-        metrics_path: /metrics
-        # Używamy nowej, krótszej nazwy PROJECT
-        static_configs:
-          - targets: ['${PROJECT}:8000'] 
-PC
+      evaluation_interval: 15s
 
-  cat > "${BASE_DIR}/prometheus-deployment.yaml" <<PD
+    scrape_configs:
+      - job_name: 'prometheus'
+        static_configs:
+          - targets: ['localhost:9090']
+
+      - job_name: 'fastapi-app'
+        metrics_path: /metrics
+        static_configs:
+          - targets: ['fastapi-web-service:80']
+EOF
+
+  cat << EOF > "$BASE_DIR/prometheus.yaml"
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: prometheus
-  namespace: ${NAMESPACE}
   labels:
-    app: prometheus
-    environment: development
+    app: $PROJECT
+    component: prometheus
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: prometheus
+      app: $PROJECT
+      component: prometheus
   template:
     metadata:
       labels:
-        app: prometheus
-        environment: development # KLUCZOWE DLA KYVERNO
+        app: $PROJECT
+        component: prometheus
     spec:
       containers:
       - name: prometheus
-        image: prom/prometheus:latest
-        args: ["--config.file=/etc/prometheus/prometheus.yml"]
+        image: prom/prometheus:v2.48.0
+        args:
+          - "--config.file=/etc/prometheus/prometheus.yml"
+          - "--storage.tsdb.path=/prometheus"
+          - "--web.enable-lifecycle"
         ports:
         - containerPort: 9090
         volumeMounts:
-        - name: config
-          mountPath: /etc/prometheus
+          - name: prometheus-config
+            mountPath: /etc/prometheus
+          - name: prometheus-storage
+            mountPath: /prometheus
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "200m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
       volumes:
-      - name: config
-        configMap:
-          name: prometheus-config
+        - name: prometheus-config
+          configMap:
+            name: prometheus-config
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: prometheus
-  namespace: ${NAMESPACE}
+  name: prometheus-service
   labels:
-    app: prometheus
-    environment: development
+    app: $PROJECT
+    component: prometheus
 spec:
+  type: ClusterIP
   ports:
   - port: 9090
+    targetPort: 9090
+    protocol: TCP
   selector:
-    app: prometheus
-PD
+    app: $PROJECT
+    component: prometheus
+EOF
 }
 
-# ==============================
-# GRAFANA (Ujednolicono etykiety)
-# ==============================
 generate_grafana(){
-  info "Generowanie Grafana..."
-  cat > "${BASE_DIR}/grafana-secret.yaml" <<GS
+  info "Generating grafana.yaml..."
+  cat << EOF > "$BASE_DIR/grafana-datasource.yaml"
 apiVersion: v1
-kind: Secret
+kind: ConfigMap
 metadata:
-  name: grafana-secret
-  namespace: ${NAMESPACE}
-type: Opaque
-stringData:
-  admin-user: admin
-  admin-password: admin
-GS
+  name: grafana-datasource
+  labels:
+    app: $PROJECT
+    component: grafana
+data:
+  prometheus.yaml: |
+    apiVersion: 1
+    datasources:
+    - name: Prometheus
+      type: prometheus
+      url: http://prometheus-service:9090
+      isDefault: true
+      access: proxy
+EOF
 
-  cat > "${BASE_DIR}/grafana-deployment.yaml" <<GD
+  cat << EOF > "$BASE_DIR/grafana.yaml"
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: grafana
-  namespace: ${NAMESPACE}
   labels:
-    app: grafana
-    environment: development
+    app: $PROJECT
+    component: grafana
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: grafana
+      app: $PROJECT
+      component: grafana
   template:
     metadata:
       labels:
-        app: grafana
-        environment: development # KLUCZOWE DLA KYVERNO
+        app: $PROJECT
+        component: grafana
     spec:
       containers:
       - name: grafana
-        image: grafana/grafana:latest
+        image: grafana/grafana:10.2.2
         ports:
         - containerPort: 3000
         env:
-        - name: GF_SECURITY_ADMIN_USER
-          valueFrom:
-            secretKeyRef:
-              name: grafana-secret
-              key: admin-user
-        - name: GF_SECURITY_ADMIN_PASSWORD
-          valueFrom:
-            secretKeyRef:
-              name: grafana-secret
-              key: admin-password
+          - name: GF_SECURITY_ADMIN_USER
+            value: admin
+          - name: GF_SECURITY_ADMIN_PASSWORD
+            value: admin
+        volumeMounts:
+          - name: grafana-datasource
+            mountPath: /etc/grafana/provisioning/datasources
         resources:
           requests:
-            memory: "256Mi"
+            memory: "128Mi"
             cpu: "100m"
           limits:
-            memory: "512Mi"
+            memory: "256Mi"
             cpu: "200m"
+      volumes:
+        - name: grafana-datasource
+          configMap:
+            name: grafana-datasource
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: grafana
-  namespace: ${NAMESPACE}
+  name: grafana-service
   labels:
-    app: grafana
-    environment: development
+    app: $PROJECT
+    component: grafana
 spec:
+  type: ClusterIP
   ports:
-  - port: 3000
+  - port: 80
+    targetPort: 3000
+    protocol: TCP
   selector:
-    app: grafana
-GD
+    app: $PROJECT
+    component: grafana
+EOF
 }
 
-# ==============================
-# LOKI (Ujednolicono etykiety)
-# ==============================
+# 8. Logging Stack
 generate_loki(){
-  info "Generowanie Loki..."
-  cat > "${BASE_DIR}/loki-config.yaml" <<LKC
+  info "Generating loki.yaml..."
+  cat << EOF > "$BASE_DIR/loki-config.yaml"
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: loki-config
-  namespace: ${NAMESPACE}
+  labels:
+    app: $PROJECT
+    component: loki
 data:
   loki.yaml: |
     auth_enabled: false
     server:
       http_listen_port: 3100
     common:
-      path_prefix: /tmp/loki
-      storage:
-        filesystem:
-          chunks_directory: /tmp/loki/chunks
-          rules_directory: /tmp/loki/rules
+      path_prefix: /loki/data
       replication_factor: 1
       ring:
+        instance_addr: 127.0.0.1
         kvstore:
           store: inmemory
     schema_config:
       configs:
-        - from: 2020-10-24
+        - from: 2024-01-01
           store: boltdb-shipper
           object_store: filesystem
-          schema: v11
+          schema: v12
           index:
             prefix: index_
             period: 24h
-LKC
+    storage_config:
+      boltdb_shipper:
+        active_index_directory: /loki/index
+        cache_location: /loki/cache
+        shared_store: filesystem
+      filesystem:
+        directory: /loki/chunks
+EOF
 
-  cat > "${BASE_DIR}/loki-deployment.yaml" <<LKD
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: loki
-  namespace: ${NAMESPACE}
-  labels:
-    app: loki
-    environment: development
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: loki
-  template:
-    metadata:
-      labels:
-        app: loki
-        environment: development # KLUCZOWE DLA KYVERNO
-    spec:
-      containers:
-      - name: loki
-        image: grafana/loki:2.9.0
-        args:
-          - -config.file=/etc/loki/loki.yaml
-        ports:
-        - containerPort: 3100
-        volumeMounts:
-        - name: config
-          mountPath: /etc/loki
-      volumes:
-      - name: config
-        configMap:
-          name: loki-config
----
+  cat << EOF > "$BASE_DIR/loki.yaml"
 apiVersion: v1
 kind: Service
 metadata:
   name: loki
-  namespace: ${NAMESPACE}
   labels:
-    app: loki
-    environment: development
+    app: $PROJECT
+    component: loki
 spec:
   ports:
-  - port: 3100
+    - name: http
+      port: 3100
+      targetPort: 3100
   selector:
-    app: loki
-LKD
+    app: $PROJECT
+    component: loki
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: loki
+  labels:
+    app: $PROJECT
+    component: loki
+spec:
+  serviceName: "loki"
+  replicas: 1
+  selector:
+    matchLabels:
+      app: $PROJECT
+      component: loki
+  template:
+    metadata:
+      labels:
+        app: $PROJECT
+        component: loki
+    spec:
+      containers:
+      - name: loki
+        image: grafana/loki:2.9.2
+        args:
+          - "-config.file=/etc/loki/loki.yaml"
+        ports:
+        - containerPort: 3100
+          name: http
+        volumeMounts:
+        - name: config
+          mountPath: /etc/loki
+        - name: storage
+          mountPath: /loki
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "200m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+      volumes:
+        - name: config
+          configMap:
+            name: loki-config
+  volumeClaimTemplates:
+  - metadata:
+      name: storage
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      resources:
+        requests:
+          storage: 5Gi
+EOF
 }
 
-# ==============================
-# PROMTAIL (Ujednolicono etykiety)
-# ==============================
 generate_promtail(){
-  info "Generowanie Promtail..."
-  cat > "${BASE_DIR}/promtail-config.yaml" <<PTC
+  info "Generating promtail.yaml..."
+  cat << EOF > "$BASE_DIR/promtail-config.yaml"
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: promtail-config
-  namespace: ${NAMESPACE}
+  labels:
+    app: $PROJECT
+    component: promtail
 data:
   promtail.yaml: |
     server:
@@ -1662,66 +1333,95 @@ data:
     clients:
       - url: http://loki:3100/loki/api/v1/push
     scrape_configs:
-    - job_name: system
-      static_configs:
-      - targets:
-          - localhost
-        labels:
-          job: varlogs
-          __path__: /var/log/*log
-PTC
+    - job_name: kubernetes-pods
+      kubernetes_sd_configs:
+        - role: pod
+      relabel_configs:
+      - source_labels: [__meta_kubernetes_pod_label_component]
+        regex: promtail
+        action: drop
+      - source_labels: [__meta_kubernetes_namespace, __meta_kubernetes_pod_name]
+        regex: (.+);(.+)
+        target_label: __path__
+        replacement: /var/log/pods/\$1/\$2/*.log
+EOF
 
-  cat > "${BASE_DIR}/promtail-deployment.yaml" <<PTD
+  cat << EOF > "$BASE_DIR/promtail.yaml"
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: promtail-sa
+  labels:
+    app: $PROJECT
+    component: promtail
+---
 apiVersion: apps/v1
-kind: Deployment
+kind: DaemonSet
 metadata:
   name: promtail
-  namespace: ${NAMESPACE}
   labels:
-    app: promtail
-    environment: development
+    app: $PROJECT
+    component: promtail
 spec:
-  replicas: 1
   selector:
     matchLabels:
-      app: promtail
+      app: $PROJECT
+      component: promtail
   template:
     metadata:
       labels:
-        app: promtail
-        environment: development # KLUCZOWE DLA KYVERNO
+        app: $PROJECT
+        component: promtail
     spec:
+      serviceAccountName: promtail-sa
+      tolerations:
+      - key: "node-role.kubernetes.io/master"
+        operator: "Exists"
+        effect: "NoSchedule"
+      hostPID: true
       containers:
       - name: promtail
-        image: grafana/promtail:2.9.0
+        image: grafana/promtail:2.9.2
         args:
-          - -config.file=/etc/promtail/promtail.yaml
+          - "-config.file=/etc/promtail/promtail.yaml"
         volumeMounts:
-        - name: config
-          mountPath: /etc/promtail
-        - name: varlog
-          mountPath: /var/log
+          - name: config
+            mountPath: /etc/promtail
+          - name: run
+            mountPath: /run/docker/
+          - name: logs
+            mountPath: /var/log/
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "50m"
+          limits:
+            memory: "128Mi"
+            cpu: "100m"
       volumes:
-      - name: config
-        configMap:
-          name: promtail-config
-      - name: varlog
-        hostPath:
-          path: /var/log
-PTD
+        - name: config
+          configMap:
+            name: promtail-config
+        - name: run
+          hostPath:
+            path: /run/docker/
+        - name: logs
+          hostPath:
+            path: /var/log/
+EOF
 }
 
-# ==============================
-# TEMPO (Ujednolicono etykiety)
-# ==============================
+# 9. Tracing Stack
 generate_tempo(){
-  info "Generowanie Tempo..."
-  cat > "${BASE_DIR}/tempo-config.yaml" <<TC
+  info "Generating tempo.yaml..."
+  cat << EOF > "$BASE_DIR/tempo-config.yaml"
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: tempo-config
-  namespace: ${NAMESPACE}
+  labels:
+    app: $PROJECT
+    component: tempo
 data:
   tempo.yaml: |
     server:
@@ -1730,518 +1430,420 @@ data:
       receivers:
         otlp:
           protocols:
-            grpc: 
+            grpc:
+              endpoint: 0.0.0.0:4317
             http:
+              endpoint: 0.0.0.0:4318
     storage:
       trace:
         backend: local
         local:
           path: /var/tempo/traces
-TC
+EOF
 
-  cat > "${BASE_DIR}/tempo-deployment.yaml" <<TD
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: tempo
-  namespace: ${NAMESPACE}
-  labels:
-    app: tempo
-    environment: development
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: tempo
-  template:
-    metadata:
-      labels:
-        app: tempo
-        environment: development # KLUCZOWE DLA KYVERNO
-    spec:
-      containers:
-      - name: tempo
-        image: grafana/tempo:2.5.0
-        args:
-          - -config.file=/etc/tempo/tempo.yaml
-        ports:
-        - containerPort: 3200
-        - containerPort: 4317 # OTLP gRPC
-        - containerPort: 4318 # OTLP HTTP
-        volumeMounts:
-        - name: config
-          mountPath: /etc/tempo
-        - name: data
-          mountPath: /var/tempo
-      volumes:
-      - name: config
-        configMap:
-          name: tempo-config
-      - name: data
-        emptyDir: {}
----
+  cat << EOF > "$BASE_DIR/tempo.yaml"
 apiVersion: v1
 kind: Service
 metadata:
   name: tempo
-  namespace: ${NAMESPACE}
   labels:
-    app: tempo
-    environment: development
+    app: $PROJECT
+    component: tempo
 spec:
   ports:
-  - name: tempo-http
-    port: 3200
-    targetPort: 3200
-  - name: otlp-grpc
-    port: 4317 
-    targetPort: 4317
-  - name: otlp-http
-    port: 4318 
-    targetPort: 4318
+    - name: http
+      port: 3200
+      targetPort: 3200
+    - name: otlp-grpc
+      port: 4317
+      targetPort: 4317
   selector:
-    app: tempo
-TD
+    app: $PROJECT
+    component: tempo
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: tempo
+  labels:
+    app: $PROJECT
+    component: tempo
+spec:
+  serviceName: "tempo"
+  replicas: 1
+  selector:
+    matchLabels:
+      app: $PROJECT
+      component: tempo
+  template:
+    metadata:
+      labels:
+        app: $PROJECT
+        component: tempo
+    spec:
+      containers:
+      - name: tempo
+        image: grafana/tempo:2.4.2
+        args:
+          - "-config.file=/etc/tempo/tempo.yaml"
+        ports:
+        - containerPort: 3200
+          name: http
+        - containerPort: 4317
+          name: otlp-grpc
+        volumeMounts:
+        - name: config
+          mountPath: /etc/tempo
+        - name: storage
+          mountPath: /var/tempo
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "200m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+      volumes:
+        - name: config
+          configMap:
+            name: tempo-config
+  volumeClaimTemplates:
+  - metadata:
+      name: storage
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      resources:
+        requests:
+          storage: 5Gi
+EOF
 }
 
-# ==============================
-# KYVERNO POLICY (Wymaga etykiety 'environment')
-# ==============================
+# 10. Ingress
+generate_ingress(){
+  info "Generating ingress.yaml..."
+  cat << EOF > "$BASE_DIR/ingress.yaml"
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: $PROJECT-ingress
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    kubernetes.io/ingress.class: "nginx"
+spec:
+  rules:
+  - host: app.$PROJECT.local
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: fastapi-web-service
+            port:
+              number: 80
+  - host: pgadmin.$PROJECT.local
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: pgadmin-service
+            port:
+              number: 80
+  - host: grafana.$PROJECT.local
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: grafana-service
+            port:
+              number: 80
+  - host: prometheus.$PROJECT.local
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: prometheus-service
+            port:
+              number: 9090
+EOF
+}
+
+# 11. Kyverno Policy
 generate_kyverno(){
-  info "Generowanie Kyverno Policy..."
-  cat > "${BASE_DIR}/kyverno-policy.yaml" <<KY
+  info "Generating kyverno-policy.yaml..."
+  cat << EOF > "$BASE_DIR/kyverno-policy.yaml"
 apiVersion: kyverno.io/v1
 kind: ClusterPolicy
 metadata:
-  name: require-labels
+  name: require-resource-requests-limits
+  annotations:
+    policies.kyverno.io/title: Require CPU and Memory Limits
+    policies.kyverno.io/category: Best Practices
+    policies.kyverno.io/severity: medium
+  labels:
+    app: $PROJECT
+    component: kyverno
 spec:
-  validationFailureAction: enforce
+  validationFailureAction: Enforce
+  background: true
   rules:
-  - name: check-for-labels
+  - name: check-container-resources
     match:
-      any:
-      - resources:
-          kinds:
-          - Pod
+      resources:
+        kinds:
+        - Pod
     validate:
-      message: "Labels 'app' and 'environment' are required."
-      pattern:
-        metadata:
-          labels:
-            app: "?*"
-            environment: "?*"
-KY
+      message: "All containers must define 'requests' and 'limits' for CPU and memory."
+      foreach:
+      - variables:
+          element: "{{ request.object.spec.containers[] }}"
+        deny:
+          conditions:
+            any:
+            - key: "{{ element.resources.requests.cpu || '' }}"
+              operator: Equals
+              value: ""
+            - key: "{{ element.resources.limits.cpu || '' }}"
+              operator: Equals
+              value: ""
+            - key: "{{ element.resources.requests.memory || '' }}"
+              operator: Equals
+              value: ""
+            - key: "{{ element.resources.limits.memory || '' }}"
+              operator: Equals
+              value: ""
+EOF
 }
 
+# 12. Kustomization
+generate_kustomization(){
+  info "Generating kustomization.yaml..."
+  cat << EOF > "$BASE_DIR/kustomization.yaml"
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
 
-# ==============================
-# STANDALONE ARGOCD APP (do apply z CLI)
-# ==============================
-generate_argocd_standalone(){
-  info "Generowanie standalone ArgoCD Application (poza kustomization)..."
-  cat > "${ROOT_DIR}/argocd-application.yaml" <<'STANDALONE'
+namespace: $NAMESPACE
+
+resources:
+  - app-deployment.yaml
+  - postgres-db.yaml
+  - pgadmin.yaml
+  - vault.yaml
+  - redis.yaml
+  - kafka-kraft.yaml
+  - prometheus-config.yaml
+  - prometheus.yaml
+  - grafana-datasource.yaml
+  - grafana.yaml
+  - loki-config.yaml
+  - loki.yaml
+  - promtail-config.yaml
+  - promtail.yaml
+  - tempo-config.yaml
+  - tempo.yaml
+  - ingress.yaml
+  - kyverno-policy.yaml
+
+commonLabels:
+  app.kubernetes.io/name: $PROJECT
+  app.kubernetes.io/instance: $PROJECT
+  app.kubernetes.io/managed-by: kustomize
+EOF
+}
+
+# 13. ArgoCD Application
+generate_argocd_app(){
+  info "Generating argocd-application.yaml..."
+  cat << EOF > "${ROOT_DIR}/argocd-application.yaml"
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: website-db-stack
+  name: $PROJECT
   namespace: argocd
   finalizers:
     - resources-finalizer.argocd.argoproj.io
 spec:
   project: default
   source:
-    repoURL: https://github.com/exea-centrum/website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui.git # UŻYWA NOWEJ NAZWY REPO!
+    repoURL: $REPO_URL
     targetRevision: HEAD
     path: manifests/base
   destination:
     server: https://kubernetes.default.svc
-    namespace: davtrowebdbvault
+    namespace: $NAMESPACE
   syncPolicy:
     automated:
       prune: true
       selfHeal: true
     syncOptions:
       - CreateNamespace=true
-      - PrunePropagationPolicy=foreground
-      - ServerSideApply=true
     retry:
       limit: 5
       backoff:
         duration: 5s
+        maxDuration: 3m0s
         factor: 2
-        maxDuration: 3m
-STANDALONE
+EOF
 }
 
-# ==============================
-# KUSTOMIZATION
-# ==============================
-generate_kustomization(){
-  info "Generowanie kustomization.yaml..."
-  cat > "${BASE_DIR}/kustomization.yaml" <<K
-apiVersion: kustomize.config.k8s.io/v1beta1
-kind: Kustomization
-
-namespace: ${NAMESPACE}
-
-resources:
-  - service-account.yaml
-  - configmap.yaml
-  - secret.yaml
-  - vault-config.yaml
-  - vault-deployment.yaml
-  - postgres.yaml
-  - pgadmin.yaml
-  - adminer.yaml           # DODANO: Adminer
-  - redis.yaml
-  - redis-commander.yaml   # DODANO: Redis UI
-  - kafka.yaml # Używamy tylko Kafki (KRaft)
-  - kafka-ui.yaml          # DODANO: Kafka UI
-  - deployment.yaml
-  - service.yaml
-  - ingress.yaml
-  - prometheus-config.yaml
-  - prometheus-deployment.yaml
-  - grafana-secret.yaml
-  - grafana-deployment.yaml
-  - loki-config.yaml
-  - loki-deployment.yaml
-  - promtail-config.yaml
-  - promtail-deployment.yaml
-  - tempo-config.yaml
-  - tempo-deployment.yaml
-  - kyverno-policy.yaml
-
-# Poprawiono: 'commonLabels' na 'labels'
-labels:
-- pairs:
-    app: website-db-stack
-    environment: development # KLUCZOWE DLA KYVERNO
-    managed-by: argocd
-
-images:
-  - name: ghcr.io/exea-centrum/website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
-    newName: ${REGISTRY} # Używamy nowej nazwy rejestru
-    newTag: latest
-K
-}
-
-# ==============================
-# README (Zaktualizowana)
-# ==============================
+# 14. README
 generate_readme(){
-  info "Generowanie README.md..."
-  cat > "${ROOT_DIR}/README.md" <<MD
-# ${PROJECT} - Unified GitOps Stack (Zintegrowane Kafka i Tracing)
+  info "Generating README.md..."
+  cat << EOF > "${ROOT_DIR}/README.md"
+# 🚀 $PROJECT - Unified GitOps Stack
 
-🚀 **Kompleksowa aplikacja z pełnym stack'iem DevOps**
+Complete modern microservices architecture deployed using **GitOps (ArgoCD + Kustomize)**.
 
-## 📋 Komponenty
+## 🛠️ Technology Stack
 
-### Aplikacja
-- **FastAPI** - Strona osobista z ankietą. **Wysyła wiadomości do Kafka i Tracing do Tempo.**
-- **PostgreSQL** - Baza danych
-- **pgAdmin** - Zarządzanie bazą danych PostgreSQL
-- **Adminer** - Uniwersalny panel do baz danych (PostgreSQL, MySQL, itp.)
+- **Application:** FastAPI (Python) with Kafka and OpenTelemetry Tracing
+- **Registry:** GitHub Container Registry (ghcr.io)
+- **CI/CD:** GitHub Actions (Build & Push Docker Image)
+- **GitOps:** ArgoCD & Kustomize
+- **Database:** PostgreSQL (StatefulSet)
+- **DB Management:** pgAdmin
+- **Cache/Broker:** Redis
+- **Message Broker:** Apache Kafka (KRaft, Single-Node)
+- **Secrets Management:** HashiCorp Vault
+- **Monitoring & Observability:**
+    - **Metrics:** Prometheus
+    - **Logs:** Loki + Promtail
+    - **Tracing:** Tempo (OpenTelemetry/OTLP)
+    - **Visualization:** Grafana
+- **Policy Management:** Kyverno
 
-### GitOps & Orchestracja
-- **ArgoCD** - Continuous Deployment
-- **Kustomize** - Zarządzanie konfiguracją
-- **Kyverno** - Policy enforcement
+## 🚀 Quick Start
 
-### Bezpieczeństwo
-- **Vault** - Zarządzanie sekretami
+1. **Generate the project:**
+   \`\`\`bash
+   chmod +x unified-stack.sh
+   ./unified-stack.sh generate
+   \`\`\`
 
-### Messaging & Cache
-- **Kafka + KRaft** - Kolejka wiadomości. **Aplikacja FastAPI jest Producentem.**
-- **Kafka UI** - Interfejs graficzny do zarządzania Kafką.
-- **Redis** - Cache i kolejki
-- **Redis Commander** - Interfejs graficzny do zarządzania Redisem.
+2. **Initialize Git and push:**
+   \`\`\`bash
+   git init
+   git add .
+   git commit -m 'Initial commit - unified stack with Kafka and Tempo tracing'
+   git branch -M main
+   git remote add origin $REPO_URL
+   git push -u origin main
+   \`\`\`
 
-### Monitoring & Observability (Pełny Trójkąt)
-- **Prometheus** - Metryki
-- **Grafana** - Wizualizacja (Metryki, Logi, Ślady)
-- **Loki** - Logi (Współpracuje z Promtail)
-- **Tempo** - Distributed tracing. **Zbiera ślady OpenTelemetry z FastAPI.**
-- **Promtail** - Agregacja logów
+3. **Deploy with ArgoCD:**
+   \`\`\`bash
+   kubectl apply -f argocd-application.yaml
+   \`\`\`
 
-## 🚀 Użycie
+## 🌐 Access URLs
 
-### 1. Generowanie manifestów
-\`\`\`bash
-chmod +x unified-deployment.sh
-./unified-deployment.sh generate
+Add to your \`/etc/hosts\`:
+\`\`\`
+127.0.0.1 app.$PROJECT.local
+127.0.0.1 pgadmin.$PROJECT.local
+127.0.0.1 grafana.$PROJECT.local
+127.0.0.1 prometheus.$PROJECT.local
 \`\`\`
 
-### 2. Inicjalizacja i push do GitHub
-\`\`\`bash
-git init
-git add .
-git commit -m "Initial commit - unified stack with Kafka and Tempo tracing"
-git branch -M main
-git remote add origin ${REPO_URL}
-git push -u origin main
-\`\`\`
+- **App:** http://app.$PROJECT.local
+- **pgAdmin:** http://pgadmin.$PROJECT.local (admin@webstack.local / adminpassword)
+- **Grafana:** http://grafana.$PROJECT.local (admin / admin)
+- **Prometheus:** http://prometheus.$PROJECT.local
 
-### 3. Weryfikacja lokalnie (opcjonalnie)
-\`\`\`bash
-# Sprawdź czy Kustomize działa
-kubectl kustomize manifests/base
+## 📊 Features
 
-# Sprawdź strukturę
-tree manifests/
-\`\`\`
+- FastAPI application with Kafka integration
+- Distributed tracing with Tempo
+- Comprehensive monitoring with Prometheus/Grafana
+- Centralized logging with Loki
+- GitOps deployment with ArgoCD
+- Security policies with Kyverno
 
-### 4. Deploy z ArgoCD
-\`\`\`bash
-# Upewnij się że ArgoCD jest zainstalowany
-kubectl get namespace argocd
-
-# Zastosuj Application manifest
-kubectl apply -f argocd-application.yaml
-
-# Sprawdź status
-kubectl get applications -n argocd
-kubectl describe application website-db-stack -n argocd
-
-# Zobacz logi sync
-kubectl logs -n argocd -l app.kubernetes.io/name=argocd-application-controller
-\`\`\`
-
-### 5. Debug jeśli są problemy
-\`\`\`bash
-# Sprawdź czy repo jest dostępne dla ArgoCD
-argocd repo list
-
-# Dodaj repo jeśli nie ma
-argocd repo add ${REPO_URL}
-
-# Sprawdź czy manifesty są poprawne
-kubectl kustomize manifests/base | kubectl apply --dry-run=client -f -
-\`\`\`
-
-## ⚠️ Typowe problemy
-
-### "app path does not exist"
-**Przyczyna**: Manifesty nie zostały jeszcze wypushowane do repo lub ścieżka jest błędna.
-
-**Rozwiązanie**:
-1. Upewnij się że zrobiłeś \`git push\` po generowaniu
-2. Sprawdź czy folder \`manifests/base/\` istnieje w repo na GitHub
-3. Sprawdź czy plik \`manifests/base/kustomization.yaml\` jest dostępny
-
-### "Unable to generate manifests"
-**Przyczyna**: Błąd w kustomization.yaml lub brakujący plik.
-
-**Rozwiązanie**:
-\`\`\`bash
-# Test lokalny
-kubectl kustomize manifests/base
-
-# Sprawdź czy wszystkie pliki istnieją
-ls -la manifests/base/
-\`\`\`
-
-### ArgoCD nie widzi repo
-**Rozwiązanie**:
-\`\`\`bash
-# Dodaj credentials dla prywatnego repo
-kubectl create secret generic repo-creds \\
-  --from-literal=url=${REPO_URL} \\
-  --from-literal=password=YOUR_GITHUB_TOKEN \\
-  --from-literal=username=YOUR_GITHUB_USERNAME \\
-  -n argocd
-\`\`\`
-
-## 🌐 Dostęp (Host-Based Routing)
-
-**Wszystkie adresy wymagają ustawienia lokalnego rekordu DNS lub wpisu w /etc/hosts, kierującego na IP kontrolera Ingress.**
-
-- **Aplikacja**: http://app.${PROJECT}.local
-- **pgAdmin**: http://pgadmin.${PROJECT}.local (Email: admin@admin.com / Hasło: admin)
-- **Adminer**: http://adminer.${PROJECT}.local (Port: 8080)
-- **Kafka UI**: http://kafka-ui.${PROJECT}.local (Port: 8080)
-- **Redis Commander (UI)**: http://redis-ui.${PROJECT}.local (Port: 8081, Użytkownik: admin / Hasło: admin)
-- **Grafana**: http://grafana.${PROJECT}.local (Użytkownik: admin / Hasło: admin)
-- **Prometheus**: http://prometheus.${PROJECT}.local
-- **Vault**: http://vault.${PROJECT}.local
-- **Tempo**: http://tempo.${PROJECT}.local
-
-## 📊 Baza danych
-
-### Tabele:
-- \`survey_responses\` - Odpowiedzi z ankiety
-- \`page_visits\` - Statystyki odwiedzin
-- \`contact_messages\` - Wiadomości kontaktowe
-
-## 🔐 Sekretna konfiguracja
-
-### GitHub Secrets wymagane:
-- \`GHCR_PAT\` - Personal Access Token dla GitHub Container Registry
-
-## 📦 Namespace
-\`${NAMESPACE}\`
-
-## 🏗️ Architektura (Zintegrowana)
+## 🏗️ Architecture
 
 \`\`\`
-┌─────────────────────────────────────────────────────┐
-│                    ArgoCD                           │
-│              (Continuous Deployment)                │
-└──────────────────┬──────────────────────────────────┘
-                   │
-                   ▼
-┌─────────────────────────────────────────────────────┐
-│              Kubernetes Cluster                     │
-│                                                     │
-│  ┌──────────────┐  ┌──────────────┐               │
-│  │   FastAPI    │  │  PostgreSQL  │               │
-│  │   Website    │──│   Database   │               │
-│  └──────────────┘  └──────────────┘               │
-│         │ Tracing (Tempo)                           │
-│         ├────────────┬─────────────┬───────────────┤
-│         ▼            ▼             ▼               ▼
-│  ┌──────────┐  ┌─────────┐  ┌─────────┐    ┌──────────┐
-│  │  Redis   │  │  Kafka  │  │  Vault  │    │ pgAdmin  │
-│  └──────────┘  └─────────┘  └─────────┘    └──────────┘
-│  ┌──────────┐  ┌─────────┐    ┌──────────┐    │
-│  │ Redis UI │  │Kafka UI │    │ Adminer  │    │
-│  └──────────┘  └─────────┘    └──────────┘    │
-│  ┌─────────────────────────────────────────────┐  │
-│  │         Observability Stack                 │  │
-│  │  ┌──────────┐ ┌─────────┐ ┌──────────┐    │  │
-│  │  │Prometheus│ │ Grafana │ │   Loki   │    │  │
-│  │  └──────────┘ └─────────┘ └──────────┘    │  │
-│  │  ┌──────────┐ ┌─────────┐                 │  │
-│  │  │  Tempo   │ │Promtail │                 │  │
-│  │  └──────────┘ └─────────┘                 │  │
-│  └─────────────────────────────────────────────┘  │
-│                                                     │
-│  ┌─────────────────────────────────────────────┐  │
-│  │              Kyverno Policies               │  │
-│  │         (Policy Enforcement)                │  │
-│  └─────────────────────────────────────────────┘  │
-└─────────────────────────────────────────────────────┘
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│   FastAPI App   │───▶│     Kafka       │───▶│   PostgreSQL    │
+└─────────────────┘    └─────────────────┘    └─────────────────┘
+         │                      │                      │
+         ▼                      ▼                      ▼
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│   Tempo         │    │   Redis         │    │   pgAdmin       │
+│   (Tracing)     │    │   (Cache)       │    │   (DB UI)       │
+└─────────────────┘    └─────────────────┘    └─────────────────┘
+         │                      │                      │
+         ▼                      ▼                      ▼
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│   Loki          │    │   Prometheus    │    │   Grafana       │
+│   (Logs)        │    │   (Metrics)     │    │   (Dashboard)   │
+└─────────────────┘    └─────────────────┘    └─────────────────┘
+         │                      │                      │
+         ▼                      ▼                      ▼
+┌─────────────────────────────────────────────────────────────┐
+│                   ArgoCD (GitOps)                           │
+└─────────────────────────────────────────────────────────────┘
 \`\`\`
-
-## 🛠️ Rozwój
-
-### Struktura projektu:
-\`\`\`
-.
-├── app/
-│   ├── main.py              # FastAPI (Producent Kafka, OpenTelemetry Tracing)
-│   ├── requirements.txt     # Zależności Python (+kafka-python, +opentelemetry)
-│   └── templates/
-│       └── index.html       # Frontend
-├── manifests/
-│   └── base/               # Manifesty Kubernetes (Deployment ma Env Vars dla Kafka/Tempo)
-│       ├── *.yaml
-│       └── kustomization.yaml
-├── .github/
-│   └── workflows/
-│       └── ci.yml          # GitHub Actions
-├── Dockerfile
-└── unified-deployment.sh   # Ten skrypt
-\`\`\`
-
-## 📝 Licencja
-
-MIT License - Dawid Trojanowski © 2025
-MD
+EOF
 }
 
 # ==============================
-# GŁÓWNA FUNKCJA
+# MAIN FUNCTION
 # ==============================
 generate_all(){
-  info "🚀 Rozpoczynam generowanie unified stack..."
-  echo ""
+  info "🚀 Starting unified stack generation..."
   
   generate_structure
   generate_fastapi_app
   generate_html_template
   generate_dockerfile
   generate_github_actions
+
+  # Kubernetes Manifests
   generate_k8s_base
   generate_postgres
   generate_pgadmin
-  generate_adminer         # DODANO ADMINER
   generate_vault
   generate_redis
-  generate_redis_ui        # DODANO REDIS UI
   generate_kafka
-  generate_kafka_ui        # DODANO KAFKA UI
   generate_prometheus
   generate_grafana
   generate_loki
   generate_promtail
   generate_tempo
+  generate_ingress
   generate_kyverno
-  generate_argocd_standalone
+
+  # GitOps
   generate_kustomization
+  generate_argocd_app
   generate_readme
   
   echo ""
-  info "✅ WSZYSTKO GOTOWE! (Zintegrowano Kafka i Tracing dla Tempo)"
+  info "✅ ALL DONE! Project name: $PROJECT"
   echo ""
-  echo "📦 Wygenerowano:"
-  echo "   ✓ FastAPI aplikacja w app/ (Producent Kafka, Tracing OTLP)"
+  echo "📦 Generated:"
+  echo "   ✓ FastAPI application in app/ (Kafka Producer, OTLP Tracing)"
   echo "   ✓ Dockerfile"
   echo "   ✓ GitHub Actions workflow"
-  echo "   ✓ Kubernetes manifesty w manifests/base/"
-  echo "   ✓ argocd-application.yaml (standalone w root)"
+  echo "   ✓ Kubernetes manifests in manifests/base/"
+  echo "   ✓ argocd-application.yaml"
   echo "   ✓ README.md"
   echo ""
-  echo "🎯 Komponenty (Zintegrowane):"
-  echo "   ✓ FastAPI + PostgreSQL + pgAdmin + Adminer"
-  echo "   ✓ Vault (secrets management)"
-  echo "   ✓ Redis + Redis Commander (cache + UI)"
-  echo "   ✓ Kafka KRaft + Kafka UI (messaging + UI)"
-  echo "   ✓ Prometheus + Grafana (monitoring)"
-  echo "   ✓ Loki + Promtail (logging)"
-  echo "   ✓ Tempo (tracing, odbiera ślady z FastAPI na porcie 4317)"
-  echo "   ✓ ArgoCD (GitOps)"
-  echo "   ✓ Kyverno (policies)"
+  echo "🚀 Next steps:"
+  echo "1. Initialize Git and push to repository"
+  echo "2. Deploy ArgoCD Application: kubectl apply -f argocd-application.yaml"
+  echo "3. Check status: kubectl get applications -n argocd"
   echo ""
-  echo "🚀 Następne kroki:"
-  echo ""
-  echo "1️⃣ Inicjalizacja Git i push:"
-  echo "   git init"
-  echo "   git add ."
-  echo "   git commit -m 'Initial commit - unified stack with Kafka and Tempo tracing'"
-  echo "   git branch -M main"
-  echo "   git remote add origin ${REPO_URL}"
-  echo "   git push -u origin main"
-  echo ""
-  echo "2️⃣ Weryfikacja struktury:"
-  echo "   tree manifests/"
-  echo ""
-  echo "3️⃣ Test lokalny Kustomize:"
-  echo "   kubectl kustomize manifests/base"
-  echo ""
-  echo "4️⃣ Deploy ArgoCD Application (po push do repo):"
-  echo "   kubectl apply -f argocd-application.yaml"
-  echo ""
-  echo "5️⃣ Sprawdź status w ArgoCD:"
-  echo "   kubectl get applications -n argocd"
-  echo "   kubectl describe application website-db-stack -n argocd"
-  echo ""
-  echo "⚠️  WAŻNE: Upewnij się że:"
-  echo "   ✓ Repozytorium ${REPO_URL} istnieje"
-  echo "   ✓ ArgoCD jest zainstalowany (kubectl get ns argocd)"
-  echo "   ✓ Folder manifests/base/ zawiera wszystkie pliki"
-  echo ""
-  echo "🌐 Dostęp:"
-  echo "   App: http://app.${PROJECT}.local"
-  echo "   pgAdmin: http://pgadmin.${PROJECT}.local"
-  echo "   Adminer: http://adminer.${PROJECT}.local"
-  echo "   Kafka UI: http://kafka-ui.${PROJECT}.local"
-  echo "   Redis Commander: http://redis-ui.${PROJECT}.local"
-  echo "   Grafana: http://grafana.${PROJECT}.local"
-  echo "   Prometheus: http://prometheus.${PROJECT}.local"
-  echo "   Vault: http://vault.${PROJECT}.local"
-  echo "   Tempo: http://tempo.${PROJECT}.local"
+  echo "⚠️  IMPORTANT: Ensure that:"
+  echo "   ✓ Repository $REPO_URL exists"
+  echo "   ✓ ArgoCD is installed (kubectl get ns argocd)"
+  echo "   ✓ manifests/base/ folder contains all files"
   echo ""
 }
 
@@ -2253,16 +1855,13 @@ case "${1:-}" in
     generate_all
     ;;
   help|-h|--help)
-    echo "Unified Deployment Script"
+    echo "Unified GitOps Stack Generator"
     echo ""
     echo "Usage: $0 generate"
     echo ""
-    echo "Generuje kompletny stack z aplikacją FastAPI i infrastrukturą Kubernetes"
+    echo "Generates complete application with full DevOps stack"
     ;;
   *)
-    echo "❌ Nieprawidłowa komenda"
-    echo "Użyj: $0 generate"
-    echo "Lub: $0 help"
-    exit 1
+    echo "Unknown command. Use: $0 help"
     ;;
 esac

@@ -1,0 +1,108 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fastapi-web-app
+  labels:
+    app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
+    component: fastapi
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
+      component: fastapi
+  template:
+    metadata:
+      labels:
+        app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
+        component: fastapi
+      annotations:
+        vault.hashicorp.com/agent-inject: "true"
+        vault.hashicorp.com/role: "web-app-role"
+        vault.hashicorp.com/agent-inject-status: "update"
+        vault.hashicorp.com/secret-volume-path: "/vault/secrets"
+        vault.hashicorp.com/agent-inject-secret-db-creds: "secret/data/database/postgres"
+        vault.hashicorp.com/agent-inject-template-db-creds: |
+          {{- with secret "secret/data/database/postgres" -}}
+          export POSTGRES_USER="{{ .Data.data.postgres-user }}"
+          export POSTGRES_PASSWORD="{{ .Data.data.postgres-password }}"
+          export POSTGRES_HOST="{{ .Data.data.postgres-host }}"
+          export POSTGRES_DB="{{ .Data.data.postgres-db }}"
+          {{- end -}}
+    spec:
+      serviceAccountName: fastapi-sa
+      initContainers:
+      - name: wait-for-db
+        image: postgres:15-alpine
+        command: 
+        - sh
+        - -c
+        - |
+          until pg_isready -h postgres-db -p 5432 -U webuser -d webdb; do
+            echo "Database not ready. Waiting..."
+            sleep 5
+          done
+          echo "Database ready!"
+        env:
+        - name: PGPASSWORD
+          value: "testpassword"
+      containers:
+      - name: app
+        image: ghcr.io/exea-centrum/website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui:latest
+        ports:
+        - containerPort: 8000
+        env:
+          - name: VAULT_ADDR
+            value: "http://vault:8200"
+          - name: APP_NAME
+            value: "website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui"
+          - name: KAFKA_BOOTSTRAP_SERVERS
+            value: "kafka:9092"
+          - name: OTEL_SERVICE_NAME
+            value: "website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui-fastapi"
+          - name: OTEL_EXPORTER_OTLP_ENDPOINT
+            value: "http://tempo:4317"
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "200m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 5
+          periodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: fastapi-web-service
+  labels:
+    app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
+    component: fastapi
+spec:
+  type: ClusterIP
+  ports:
+  - port: 80
+    targetPort: 8000
+    protocol: TCP
+  selector:
+    app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
+    component: fastapi
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: fastapi-sa
+  labels:
+    app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
+    component: fastapi

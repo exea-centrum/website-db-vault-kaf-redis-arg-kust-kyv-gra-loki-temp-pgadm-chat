@@ -2,66 +2,69 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: pgadmin
-  namespace: davtrowebdbvault
   labels:
-    app: pgadmin
-    environment: development
+    app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
+    component: pgadmin
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: pgadmin
+      app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
+      component: pgadmin
   template:
     metadata:
       labels:
-        app: pgadmin
-        environment: development # KLUCZOWE DLA KYVERNO
+        app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
+        component: pgadmin
     spec:
       initContainers:
       - name: wait-for-db
-        image: postgres:14
+        image: postgres:15-alpine
         command: 
         - sh
         - -c
         - |
-          until pg_isready -h postgres -p 5432 -U appuser -d appdb; do
+          until pg_isready -h postgres-db -p 5432 -U webuser -d webdb; do
             sleep 5
           done
         env:
         - name: PGPASSWORD
-          valueFrom:
-            secretKeyRef:
-              name: db-secret
-              key: postgres-password
+          value: "testpassword"
       containers:
       - name: pgadmin
         image: dpage/pgadmin4:latest
-        env:
-        - name: PGADMIN_DEFAULT_EMAIL
-          value: "admin@admin.com"
-        - name: PGADMIN_DEFAULT_PASSWORD
-          value: "admin"
         ports:
         - containerPort: 80
+        env:
+          - name: PGADMIN_DEFAULT_EMAIL
+            value: "admin@webstack.local"
+          - name: PGADMIN_DEFAULT_PASSWORD
+            value: "adminpassword"
+          - name: PGADMIN_LISTEN_PORT
+            value: "80"
+          - name: PGADMIN_LISTEN_ADDRESS
+            value: "0.0.0.0"
         resources:
           requests:
-            memory: "256Mi"
+            memory: "128Mi"
             cpu: "100m"
           limits:
-            memory: "512Mi"
+            memory: "256Mi"
             cpu: "200m"
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: pgadmin
-  namespace: davtrowebdbvault
+  name: pgadmin-service
   labels:
-    app: pgadmin
-    environment: development
+    app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
+    component: pgadmin
 spec:
-  selector:
-    app: pgadmin
+  type: ClusterIP
   ports:
   - port: 80
     targetPort: 80
+    protocol: TCP
+  selector:
+    app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
+    component: pgadmin

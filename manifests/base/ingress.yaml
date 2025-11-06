@@ -1,17 +1,12 @@
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui-ui-ingress
-  namespace: davtrowebdbvault
+  name: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui-ingress
   annotations:
     nginx.ingress.kubernetes.io/rewrite-target: /
-    # nginx.ingress.kubernetes.io/ssl-redirect: "false" # Opcjonalne
-  labels: 
-    app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
-    environment: development
+    kubernetes.io/ingress.class: "nginx"
 spec:
   rules:
-  # 1. APLIKACJA GŁÓWNA
   - host: app.website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui.local
     http:
       paths:
@@ -19,11 +14,9 @@ spec:
         pathType: Prefix
         backend:
           service:
-            name: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
+            name: fastapi-web-service
             port:
               number: 80
-              
-  # 2. PGADMIN
   - host: pgadmin.website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui.local
     http:
       paths:
@@ -31,47 +24,9 @@ spec:
         pathType: Prefix
         backend:
           service:
-            name: pgadmin
+            name: pgadmin-service
             port:
-              number: 80 # pgadmin service port
-              
-  # 3. ADMINER
-  - host: adminer.website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui.local
-    http:
-      paths:
-      - path: /
-        pathType: Prefix
-        backend:
-          service:
-            name: adminer
-            port:
-              number: 8080 # adminer service port
-              
-  # 4. KAFKA UI (Kafka-UI)
-  - host: kafka-ui.website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui.local
-    http:
-      paths:
-      - path: /
-        pathType: Prefix
-        backend:
-          service:
-            name: kafka-ui
-            port:
-              number: 8080 # kafka-ui service port
-              
-  # 5. REDIS COMMANDER (UI)
-  - host: redis-ui.website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui.local
-    http:
-      paths:
-      - path: /
-        pathType: Prefix
-        backend:
-          service:
-            name: redis-commander
-            port:
-              number: 8081 # redis-commander service port
-              
-  # 6. GRAFANA
+              number: 80
   - host: grafana.website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui.local
     http:
       paths:
@@ -79,11 +34,9 @@ spec:
         pathType: Prefix
         backend:
           service:
-            name: grafana
+            name: grafana-service
             port:
-              number: 3000 # grafana service port
-              
-  # 7. PROMETHEUS
+              number: 80
   - host: prometheus.website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui.local
     http:
       paths:
@@ -91,42 +44,6 @@ spec:
         pathType: Prefix
         backend:
           service:
-            name: prometheus
+            name: prometheus-service
             port:
-              number: 9090 # prometheus service port
-              
-  # 8. LOKI
-  - host: loki.website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui.local
-    http:
-      paths:
-      - path: /
-        pathType: Prefix
-        backend:
-          service:
-            name: loki
-            port:
-              number: 3100 # loki service port
-              
-  # 9. VAULT
-  - host: vault.website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui.local
-    http:
-      paths:
-      - path: /
-        pathType: Prefix
-        backend:
-          service:
-            name: vault
-            port:
-              number: 8200 # vault service port
-              
-  # 10. TEMPO (UI/Query Frontend)
-  - host: tempo.website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui.local
-    http:
-      paths:
-      - path: /
-        pathType: Prefix
-        backend:
-          service:
-            name: tempo
-            port:
-              number: 3200 # tempo service port
+              number: 9090

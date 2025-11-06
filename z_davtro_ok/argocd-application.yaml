@@ -1,28 +1,30 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
+  name: website-db-stack
   namespace: argocd
   finalizers:
     - resources-finalizer.argocd.argoproj.io
 spec:
   project: default
   source:
-    repoURL: https://github.com/exea-centrum/website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui.git
+    repoURL: https://github.com/exea-centrum/website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui.git # UŻYWA NOWEJ NAZWY REPO!
     targetRevision: HEAD
     path: manifests/base
   destination:
     server: https://kubernetes.default.svc
-    namespace: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui-ns
+    namespace: davtrowebdbvault
   syncPolicy:
     automated:
       prune: true
       selfHeal: true
     syncOptions:
       - CreateNamespace=true
+      - PrunePropagationPolicy=foreground
+      - ServerSideApply=true
     retry:
       limit: 5
       backoff:
         duration: 5s
-        maxDuration: 3m0s
         factor: 2
+        maxDuration: 3m
