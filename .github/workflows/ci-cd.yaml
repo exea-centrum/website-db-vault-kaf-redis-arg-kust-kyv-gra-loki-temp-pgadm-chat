@@ -8,6 +8,7 @@ on:
       - "app/**"
       - "Dockerfile"
       - "requirements.txt"
+      - "manifests/**"
 
 jobs:
   build-and-push:

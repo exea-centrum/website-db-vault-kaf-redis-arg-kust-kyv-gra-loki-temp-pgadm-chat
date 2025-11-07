@@ -20,7 +20,7 @@ spec:
     spec:
       containers:
         - name: kafka
-          image: apache/kafka:3.6.0
+          image: apache/kafka:4.1.0
           ports:
             - containerPort: 9092
               name: client
