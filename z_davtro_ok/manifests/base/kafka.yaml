@@ -20,8 +20,8 @@ spec:
     spec:
       containers:
         - name: kafka
-          image: bitnami/kafka:3.6.1 # Changed to confirmed available version
-          imagePullPolicy: IfNotPresent # Explicit pull policy
+          image: bitnami/kafka:3.6.0-debian-12-r7 # Zmieniony tag
+          imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 9092
               name: client
