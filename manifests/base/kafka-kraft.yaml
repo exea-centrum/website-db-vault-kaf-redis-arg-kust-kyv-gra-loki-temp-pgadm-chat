@@ -7,10 +7,10 @@ metadata:
     component: kafka
 spec:
   ports:
-  - port: 9092
-    name: client
-  - port: 9093
-    name: inter-broker
+    - port: 9092
+      name: client
+    - port: 9093
+      name: inter-broker
   selector:
     app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
     component: kafka
@@ -37,47 +37,47 @@ spec:
         component: kafka
     spec:
       containers:
-      - name: kafka
-        image: bitnami/kafka:3.6.1
-        ports:
-        - containerPort: 9092
-          name: client
-        - containerPort: 9093
-          name: inter-broker
-        env:
-          - name: KAFKA_CFG_NODE_ID
-            value: "1"
-          - name: KAFKA_CFG_PROCESS_ROLES
-            value: "controller,broker"
-          - name: KAFKA_CFG_CONTROLLER_QUORUM_VOTERS
-            value: "1@kafka:9093"
-          - name: KAFKA_CFG_LISTENERS
-            value: "CLIENT://:9092, INTERNAL://:9093"
-          - name: KAFKA_CFG_ADVERTISED_LISTENERS
-            value: "CLIENT://kafka:9092, INTERNAL://kafka:9093"
-          - name: KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP
-            value: "CLIENT:PLAINTEXT, INTERNAL:PLAINTEXT"
-          - name: KAFKA_CFG_CONTROLLER_LISTENER_NAMES
-            value: "INTERNAL"
-          - name: KAFKA_CFG_KRAFT_CLUSTER_ID
-            value: "4mUj5vFk3tW7pY0iH2gR8qL6eD9oB1cZ"
-          - name: KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE
-            value: "true"
-        volumeMounts:
-        - name: kafka-data
-          mountPath: /bitnami/kafka/data
+        - name: kafka
+          image: bitnami/kafka:3.7.0
+          ports:
+            - containerPort: 9092
+              name: client
+            - containerPort: 9093
+              name: inter-broker
+          env:
+            - name: KAFKA_CFG_NODE_ID
+              value: "1"
+            - name: KAFKA_CFG_PROCESS_ROLES
+              value: "controller,broker"
+            - name: KAFKA_CFG_CONTROLLER_QUORUM_VOTERS
+              value: "1@kafka:9093"
+            - name: KAFKA_CFG_LISTENERS
+              value: "CLIENT://:9092,INTERNAL://:9093"
+            - name: KAFKA_CFG_ADVERTISED_LISTENERS
+              value: "CLIENT://kafka:9092,INTERNAL://kafka:9093"
+            - name: KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP
+              value: "CLIENT:PLAINTEXT,INTERNAL:PLAINTEXT"
+            - name: KAFKA_CFG_CONTROLLER_LISTENER_NAMES
+              value: "INTERNAL"
+            - name: KAFKA_CFG_KRAFT_CLUSTER_ID
+              value: "4mUj5vFk3tW7pY0iH2gR8qL6eD9oB1cZ"
+            - name: KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE
+              value: "true"
+          volumeMounts:
+            - name: kafka-data
+              mountPath: /bitnami/kafka/data
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "500m"
+            limits:
+              memory: "1024Mi"
+              cpu: "1000m"
+  volumeClaimTemplates:
+    - metadata:
+        name: kafka-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
         resources:
           requests:
-            memory: "512Mi"
-            cpu: "500m"
-          limits:
-            memory: "1024Mi"
-            cpu: "1000m"
-  volumeClaimTemplates:
-  - metadata:
-      name: kafka-data
-    spec:
-      accessModes: [ "ReadWriteOnce" ]
-      resources:
-        requests:
-          storage: 10Gi
+            storage: 10Gi
