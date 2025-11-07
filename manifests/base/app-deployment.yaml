@@ -32,7 +32,6 @@ spec:
           {{- end -}}
     spec:
       serviceAccountName: fastapi-sa
-      # USUŃ imagePullSecrets - obraz jest publiczny
       initContainers:
         - name: wait-for-db
           image: postgres:15-alpine
@@ -55,15 +54,15 @@ spec:
             - containerPort: 8000
           env:
             - name: VAULT_ADDR
-              value: "http://vault:8200"
+              value: "http://vault:8200" # Jeśli Vault jest w tym samym namespace, zostawiamy. Jeśli nie, zmieniamy na FQDN.
             - name: APP_NAME
               value: "website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui"
             - name: KAFKA_BOOTSTRAP_SERVERS
-              value: "kafka:9092"
+              value: "kafka.website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui-ns.svc.cluster.local:9092"
             - name: OTEL_SERVICE_NAME
               value: "website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui-fastapi"
             - name: OTEL_EXPORTER_OTLP_ENDPOINT
-              value: "http://tempo:4317"
+              value: "http://tempo:4317" # Podobnie, jeśli Tempo w innym namespace, zmieniamy na FQDN.
           resources:
             requests:
               memory: "256Mi"
