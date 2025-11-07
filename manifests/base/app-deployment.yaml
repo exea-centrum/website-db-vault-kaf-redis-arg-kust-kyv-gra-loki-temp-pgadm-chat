@@ -32,8 +32,7 @@ spec:
           {{- end -}}
     spec:
       serviceAccountName: fastapi-sa
-      imagePullSecrets:
-        - name: ghcr-secret
+      # USUŃ imagePullSecrets - obraz jest publiczny
       initContainers:
         - name: wait-for-db
           image: postgres:15-alpine
