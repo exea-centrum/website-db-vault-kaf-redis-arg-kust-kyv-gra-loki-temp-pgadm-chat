@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Kontakt</title>
+</head>
+<body>
+  <h1>Kontakt</h1>
+  <form id="contact" method="post" action="/api/contact">
+    <input name="email" placeholder="email" required/><br/>
+    <textarea name="message" placeholder="wiadomość" required></textarea><br/>
+    <input name="id" placeholder="opcjonalne id"/><br/>
+    <button type="submit">Wyślij</button>
+  </form>
+  <script>
+    document.getElementById('contact').addEventListener('submit', async e=>{
+      e.preventDefault();
+      const fd = new FormData(e.target);
+      const res = await fetch('/api/contact',{method:'POST',body:fd});
+      const j = await res.json().catch(()=>({}));
+      alert(JSON.stringify(j));
+    });
+  </script>
+</body>
+</html>
