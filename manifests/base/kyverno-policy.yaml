@@ -2,13 +2,6 @@ apiVersion: kyverno.io/v1
 kind: ClusterPolicy
 metadata:
   name: require-resource-requests-limits
-  annotations:
-    policies.kyverno.io/title: Require CPU and Memory Limits
-    policies.kyverno.io/category: Best Practices
-    policies.kyverno.io/severity: medium
-  labels:
-    app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
-    component: kyverno
 spec:
   validationFailureAction: Enforce
   background: true
@@ -30,11 +23,5 @@ spec:
               operator: Equals
               value: ""
             - key: "{{ element.resources.limits.cpu || '' }}"
-              operator: Equals
-              value: ""
-            - key: "{{ element.resources.requests.memory || '' }}"
-              operator: Equals
-              value: ""
-            - key: "{{ element.resources.limits.memory || '' }}"
               operator: Equals
               value: ""

@@ -2,60 +2,38 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: prometheus
-  labels:
-    app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
-    component: prometheus
+  namespace: davtrowebdbvault
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
-      component: prometheus
+      app: prometheus
   template:
     metadata:
       labels:
-        app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
-        component: prometheus
+        app: prometheus
     spec:
       containers:
       - name: prometheus
         image: prom/prometheus:v2.48.0
-        args:
-          - "--config.file=/etc/prometheus/prometheus.yml"
-          - "--storage.tsdb.path=/prometheus"
-          - "--web.enable-lifecycle"
         ports:
         - containerPort: 9090
         volumeMounts:
-          - name: prometheus-config
-            mountPath: /etc/prometheus
-          - name: prometheus-storage
-            mountPath: /prometheus
-        resources:
-          requests:
-            memory: "256Mi"
-            cpu: "200m"
-          limits:
-            memory: "512Mi"
-            cpu: "500m"
+        - name: config
+          mountPath: /etc/prometheus
       volumes:
-        - name: prometheus-config
-          configMap:
-            name: prometheus-config
+      - name: config
+        configMap:
+          name: prometheus-config
 ---
 apiVersion: v1
 kind: Service
 metadata:
   name: prometheus-service
-  labels:
-    app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
-    component: prometheus
+  namespace: davtrowebdbvault
 spec:
-  type: ClusterIP
   ports:
   - port: 9090
     targetPort: 9090
-    protocol: TCP
   selector:
-    app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
-    component: prometheus
+    app: prometheus

@@ -1,7 +1,7 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: websitedbvault
+  name: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
   namespace: argocd
 spec:
   project: default
@@ -11,16 +11,8 @@ spec:
     path: manifests/base
   destination:
     server: https://kubernetes.default.svc
-    namespace: websitedbvault
+    namespace: davtrowebdbvault
   syncPolicy:
     automated:
-      prune: true
       selfHeal: true
-    syncOptions:
-      - CreateNamespace=true
-    retry:
-      limit: 5
-      backoff:
-        duration: 5s
-        maxDuration: 3m0s
-        factor: 2
+      prune: true

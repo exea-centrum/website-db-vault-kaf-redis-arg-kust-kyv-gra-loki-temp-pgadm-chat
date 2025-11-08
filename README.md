@@ -1,93 +1,27 @@
-# 🚀 website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui - Unified GitOps Stack
+# website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui - All-in-one teaching stack
 
-Complete modern microservices architecture deployed using **GitOps (ArgoCD + Kustomize)**.
+This repository is a generated example for the lab exercise:
+- Form -> Redis -> Worker -> Kafka + Postgres
+- Monitoring: Prometheus / Grafana / Tempo / Loki / Promtail
+- Secrets demo: Vault (dev mode) - DO NOT use in production
+- Policy: Kyverno (example ClusterPolicy)
+- UI: Kafka UI, RedisInsight, pgAdmin, Grafana
 
-## 🛠️ Technology Stack
+Quickstart (local minikube / cluster):
+1. Build & push the container (or change manifests to use local image)
+   docker build -t ghcr.io/exea-centrum/website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui:latest .
+   docker push ghcr.io/exea-centrum/website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui:latest
 
-- **Application:** FastAPI (Python) with Kafka and OpenTelemetry Tracing
-- **Registry:** GitHub Container Registry (ghcr.io)
-- **CI/CD:** GitHub Actions (Build & Push Docker Image)
-- **GitOps:** ArgoCD & Kustomize
-- **Database:** PostgreSQL (StatefulSet)
-- **DB Management:** pgAdmin
-- **Cache/Broker:** Redis
-- **Message Broker:** Apache Kafka (KRaft, Single-Node)
-- **Secrets Management:** HashiCorp Vault
-- **Monitoring & Observability:**
-    - **Metrics:** Prometheus
-    - **Logs:** Loki + Promtail
-    - **Tracing:** Tempo (OpenTelemetry/OTLP)
-    - **Visualization:** Grafana
-- **Policy Management:** Kyverno
+2. Apply manifests:
+   kubectl apply -k manifests/base
 
-## 🚀 Quick Start
+3. Test flow:
+   - Submit: curl -F "email=test@x" -F "message=hello" http://<ingress or svc>/api/contact
+   - Check Redis LRANGE outgoing_messages 0 -1
+   - Check message-processor logs, Kafka UI, and Postgres entries
 
-1. **Generate the project:**
-   ```bash
-   chmod +x unified-stack.sh
-   ./unified-stack.sh generate
-   ```
+Security:
+- Replace example passwords and Vault dev-mode with production secrets (K8s Secret, SealedSecrets or Vault with proper auth)
+- Validate Kyverno policy and resource requests prior to production
 
-2. **Initialize Git and push:**
-   ```bash
-   git init
-   git add .
-   git commit -m 'Initial commit - unified stack with Kafka and Tempo tracing'
-   git branch -M main
-   git remote add origin https://github.com/exea-centrum/website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui.git
-   git push -u origin main
-   ```
-
-3. **Deploy with ArgoCD:**
-   ```bash
-   kubectl apply -f argocd-application.yaml
-   ```
-
-## 🌐 Access URLs
-
-Add to your `/etc/hosts`:
-```
-127.0.0.1 app.website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui.local
-127.0.0.1 pgadmin.website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui.local
-127.0.0.1 grafana.website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui.local
-127.0.0.1 prometheus.website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui.local
-```
-
-- **App:** http://app.website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui.local
-- **pgAdmin:** http://pgadmin.website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui.local (admin@webstack.local / adminpassword)
-- **Grafana:** http://grafana.website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui.local (admin / admin)
-- **Prometheus:** http://prometheus.website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui.local
-
-## 📊 Features
-
-- FastAPI application with Kafka integration
-- Distributed tracing with Tempo
-- Comprehensive monitoring with Prometheus/Grafana
-- Centralized logging with Loki
-- GitOps deployment with ArgoCD
-- Security policies with Kyverno
-
-## 🏗️ Architecture
-
-```
-┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   FastAPI App   │───▶│     Kafka       │───▶│   PostgreSQL    │
-└─────────────────┘    └─────────────────┘    └─────────────────┘
-         │                      │                      │
-         ▼                      ▼                      ▼
-┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   Tempo         │    │   Redis         │    │   pgAdmin       │
-│   (Tracing)     │    │   (Cache)       │    │   (DB UI)       │
-└─────────────────┘    └─────────────────┘    └─────────────────┘
-         │                      │                      │
-         ▼                      ▼                      ▼
-┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   Loki          │    │   Prometheus    │    │   Grafana       │
-│   (Logs)        │    │   (Metrics)     │    │   (Dashboard)   │
-└─────────────────┘    └─────────────────┘    └─────────────────┘
-         │                      │                      │
-         ▼                      ▼                      ▼
-┌─────────────────────────────────────────────────────────────┐
-│                   ArgoCD (GitOps)                           │
-└─────────────────────────────────────────────────────────────┘
-```
+README generated by unified-stack.sh

@@ -2,6 +2,7 @@ apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: vault-sa
+  namespace: davtrowebdbvault
   labels:
     app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
     component: vault
@@ -10,81 +11,60 @@ apiVersion: v1
 kind: Service
 metadata:
   name: vault
+  namespace: davtrowebdbvault
   labels:
     app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
     component: vault
 spec:
   clusterIP: None
   ports:
-    - name: http
-      port: 8200
+  - name: http
+    port: 8200
   selector:
-    app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
+    app: vault
     component: vault
 ---
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: vault
+  namespace: davtrowebdbvault
   labels:
     app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
     component: vault
 spec:
-  serviceName: "vault"
+  serviceName: vault
   replicas: 1
   selector:
     matchLabels:
-      app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
+      app: vault
       component: vault
   template:
     metadata:
       labels:
-        app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
+        app: vault
         component: vault
     spec:
       serviceAccountName: vault-sa
       containers:
-        - name: vault
-          image: hashicorp/vault:1.15.0
-          securityContext:
-            capabilities:
-              add:
-                - IPC_LOCK
-          args:
-            - server
-            - -dev
-            - -dev-listen-address=0.0.0.0:8200
-            - -dev-root-token-id=root
-          ports:
-            - containerPort: 8200
-          env:
-            - name: VAULT_DEV_ROOT_TOKEN_ID
-              value: "root"
-            - name: VAULT_ADDR
-              value: "http://0.0.0.0:8200"
-            - name: VAULT_API_ADDR
-              value: "http://0.0.0.0:8200"
-          volumeMounts:
-            - name: vault-storage
-              mountPath: /vault/file
-          resources:
-            requests:
-              memory: "512Mi"
-              cpu: "500m"
-            limits:
-              memory: "1024Mi"
-              cpu: "1000m"
-          readinessProbe:
-            httpGet:
-              path: /v1/sys/health
-              port: 8200
-            initialDelaySeconds: 5
-            periodSeconds: 5
+      - name: vault
+        image: hashicorp/vault:1.15.0
+        ports:
+        - containerPort: 8200
+        env:
+        - name: VAULT_LOCAL_CONFIG
+          value: |
+            listener "tcp" { address = "0.0.0.0:8200" tls_disable = "true" }
+            storage "file" { path = "/vault/file" }
+            ui = true
+        volumeMounts:
+        - name: vault-data
+          mountPath: /vault/file
   volumeClaimTemplates:
-    - metadata:
-        name: vault-storage
-      spec:
-        accessModes: ["ReadWriteOnce"]
-        resources:
-          requests:
-            storage: 1Gi
+  - metadata:
+      name: vault-data
+    spec:
+      accessModes: ["ReadWriteOnce"]
+      resources:
+        requests:
+          storage: 1Gi

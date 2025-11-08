@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: kafka-ui
-  namespace: websitedbvault
+  namespace: davtrowebdbvault
   labels:
     app: kafka-ui
     component: monitoring
@@ -17,54 +17,19 @@ spec:
         app: kafka-ui
     spec:
       containers:
-        - name: kafka-ui
-          image: provectuslabs/kafka-ui:latest
-          ports:
-            - containerPort: 8080
-          env:
-            - name: KAFKA_CLUSTERS_0_NAME
-              value: "local-kafka"
-            - name: KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS
-              value: "kafka:9092"
-            - name: KAFKA_CLUSTERS_0_PROPERTIES_SECURITY_PROTOCOL
-              value: "PLAINTEXT"
-            - name: KAFKA_CLUSTERS_0_READONLY
-              value: "false"
-          resources:
-            requests:
-              memory: "512Mi"
-              cpu: "200m"
-            limits:
-              memory: "1Gi"
-              cpu: "500m"
-          livenessProbe:
-            httpGet:
-              path: /api/clusters
-              port: 8080
-            initialDelaySeconds: 30
-            periodSeconds: 10
-          readinessProbe:
-            httpGet:
-              path: /api/clusters
-              port: 8080
-            initialDelaySeconds: 5
-            periodSeconds: 5
-
+      - name: kafka-ui
+        image: provectuslabs/kafka-ui:latest
+        ports:
+        - containerPort: 8080
 ---
 apiVersion: v1
 kind: Service
 metadata:
   name: kafka-ui
-  namespace: websitedbvault
-  labels:
-    app: kafka-ui
-    component: monitoring
+  namespace: davtrowebdbvault
 spec:
   ports:
-    - port: 8080
-      targetPort: 8080
-      protocol: TCP
-      name: http
+  - port: 8080
+    targetPort: 8080
   selector:
     app: kafka-ui
-  type: ClusterIP

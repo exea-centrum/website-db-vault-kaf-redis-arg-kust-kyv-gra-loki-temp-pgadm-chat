@@ -2,48 +2,35 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: redis
+  namespace: davtrowebdbvault
   labels:
-    app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
+    app: redis
     component: redis
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
-      component: redis
+      app: redis
   template:
     metadata:
       labels:
-        app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
-        component: redis
+        app: redis
     spec:
       containers:
       - name: redis
         image: redis:7-alpine
         ports:
         - containerPort: 6379
-        command: ["redis-server", "--appendonly", "yes"]
-        resources:
-          requests:
-            memory: "128Mi"
-            cpu: "100m"
-          limits:
-            memory: "256Mi"
-            cpu: "200m"
+        command: ["redis-server","--appendonly","yes"]
 ---
 apiVersion: v1
 kind: Service
 metadata:
   name: redis
-  labels:
-    app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
-    component: redis
+  namespace: davtrowebdbvault
 spec:
-  type: ClusterIP
   ports:
-    - port: 6379
-      targetPort: 6379
-      protocol: TCP
+  - port: 6379
+    targetPort: 6379
   selector:
-    app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
-    component: redis
+    app: redis
