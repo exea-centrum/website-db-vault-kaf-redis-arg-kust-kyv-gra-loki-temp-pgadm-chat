@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Dawid Trojanowski - Kontakt</title>
+  <style>
+    body{font-family:system-ui,Arial;background:#0b1220;color:#e6eef8;padding:24px}
+    .card{max-width:720px;margin:auto;background:rgba(255,255,255,0.02);padding:18px;border-radius:10px}
+    input,textarea{width:100%;padding:8px;margin:6px 0;border-radius:6px;border:1px solid rgba(255,255,255,0.06);background:transparent;color:#fff}
+    button{background:#7c3aed;color:#fff;padding:10px 14px;border-radius:8px;border:none;cursor:pointer}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Kontakt</h1>
+    <p>Wiadomość trafi do kolejki Redis; worker zapisze do Postgresa i wyśle do Kafki.</p>
+    <form id="contact-form">
+      <input name="email" type="email" placeholder="Twój email" required/>
+      <textarea name="message" rows="5" placeholder="Twoja wiadomość" required></textarea>
+      <input name="id" placeholder="opcjonalne id"/>
+      <button type="submit">Wyślij</button>
+    </form>
+    <div id="result" style="margin-top:12px;color:#bceeae"></div>
+  </div>
+  <script>
+    const f = document.getElementById('contact-form'), r = document.getElementById('result');
+    f.addEventListener('submit', async e=>{
+      e.preventDefault();
+      const fd = new FormData(f);
+      const res = await fetch('/api/contact', { method: 'POST', body: fd });
+      const j = await res.json().catch(()=>({}));
+      r.textContent = j.status || j.message || JSON.stringify(j);
+      setTimeout(()=>r.textContent = '',5000);
+      f.reset();
+    });
+  </script>
+</body>
+</html>

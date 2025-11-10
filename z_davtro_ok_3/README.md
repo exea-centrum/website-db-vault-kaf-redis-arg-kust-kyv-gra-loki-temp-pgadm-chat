@@ -19,4 +19,3 @@ Quickstart:
 Notes:
 - Vault runs with disable_mlock=true in manifest to avoid IPC_LOCK issues on some nodes.
 - Replace example passwords and Vault dev-mode with proper secrets before production.
-- Dane z formularzy (contact i survey) przechodzą przez Redis -> Kafka -> Postgres.

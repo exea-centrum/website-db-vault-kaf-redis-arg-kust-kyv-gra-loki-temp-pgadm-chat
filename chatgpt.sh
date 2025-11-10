@@ -5,22 +5,22 @@ IFS=$'\n\t'
 
 # unified-stack.sh - All-in-one generator
 # Generates:
-#  - app/ (FastAPI main.py, worker.py, templates/index.html, requirements.txt)
-#  - Dockerfile
-#  - .github/workflows/ci-cd.yaml (fixed for GHCR + GHCR_PAT)
-#  - manifests/base/* (app, worker, postgres, pgadmin, vault, redis, redis-insight, kafka, kafka-ui,
-#                       prometheus, grafana, loki, promtail, tempo, ingress, kyverno, kustomization)
-#  - argocd-application.yaml
-#  - README.md
+# - app/ (FastAPI main.py, worker.py, templates/index.html, requirements.txt)
+# - Dockerfile
+# - .github/workflows/ci-cd.yaml (fixed for GHCR + GHCR_PAT)
+# - manifests/base/* (app, worker, postgres, pgadmin, vault, redis, redis-insight, kafka, kafka-ui,
+# prometheus, grafana, loki, promtail, tempo, ingress, kyverno, kustomization)
+# - argocd-application.yaml
+# - README.md
 #
 # Usage:
-#   chmod +x unified-stack.sh
-#   ./unified-stack.sh generate
+# chmod +x unified-stack.sh
+# ./unified-stack.sh generate
 #
 # Notes:
-#  - Workflow expects secrets.GHCR_PAT to be configured (or change to use GITHUB_TOKEN).
-#  - Vault manifest includes disable_mlock = true to avoid IPC_LOCK issues on some nodes.
-#  - This is a teaching/demo scaffold. Replace credentials and remove dev-mode patterns before production.
+# - Workflow expects secrets.GHCR_PAT to be configured (or change to use GITHUB_TOKEN).
+# - Vault manifest includes disable_mlock = true to avoid IPC_LOCK issues on some nodes.
+# - This is a teaching/demo scaffold. Replace credentials and remove dev-mode patterns before production.
 
 PROJECT="website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui"
 NAMESPACE="davtrowebdbvault"
@@ -47,52 +47,171 @@ generate_fastapi_app(){
   info "Generating FastAPI app (main.py, worker.py, templates, requirements)..."
 
   cat > "${APP_DIR}/main.py" <<'PY'
-#!/usr/bin/env python3
-# app/main.py - FastAPI frontend that queues contact messages to Redis
 from fastapi import FastAPI, Form, Request, HTTPException
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.middleware.cors import CORSMiddleware
 import os, json, time, logging
 import redis
+from pydantic import BaseModel
 from prometheus_client import Counter
 from prometheus_fastapi_instrumentator import Instrumentator
+import hvac
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("fastapi")
 
-app = FastAPI(title="Personal Website - Contact Queue")
+app = FastAPI(title="Personal Website - Queue")
 templates = Jinja2Templates(directory="templates")
 
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 
 REDIS_HOST = os.getenv("REDIS_HOST", "redis")
 REDIS_PORT = int(os.getenv("REDIS_PORT", "6379"))
-REDIS_LIST = os.getenv("REDIS_LIST", "outgoing_messages")
+REDIS_LIST = os.getenv("REDIS_LIST", "messages")
 
-CONTACT_PUSHED = Counter("app_contact_pushed_total", "Number of contact messages pushed to Redis")
+MESSAGE_PUSHED = Counter("app_message_pushed_total", "Number of messages pushed to Redis")
 
 def get_redis():
     return redis.Redis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=True)
 
 Instrumentator().instrument(app).expose(app)
 
+class SurveyResponse(BaseModel):
+    question: str
+    answer: str
+
+def get_vault_secret(secret_path: str) -> dict:
+    try:
+        vault_addr = os.getenv("VAULT_ADDR", "http://vault:8200")
+        vault_token = os.getenv("VAULT_TOKEN")
+        if vault_token:
+            client = hvac.Client(url=vault_addr, token=vault_token)
+            secret = client.read(secret_path)
+            if secret:
+                return secret['data']['data']
+        else:
+            logger.warning("Vault token not available, using fallback")
+    except Exception as e:
+        logger.warning(f"Error fetching from Vault: {e}, using fallback")
+    return {}
+
+def get_database_config() -> str:
+    vault_secret = get_vault_secret("secret/data/database/postgres")
+    if vault_secret:
+        return f"dbname={vault_secret.get('postgres-db', 'webdb')} user={vault_secret.get('postgres-user', 'webuser')} password={vault_secret.get('postgres-password', 'testpassword')} host={vault_secret.get('postgres-host', 'postgres-db')}"
+    else:
+        return os.getenv("DATABASE_URL", "dbname=webdb user=webuser password=testpassword host=postgres-db")
+
+DB_CONN = get_database_config()
+
 @app.get("/", response_class=HTMLResponse)
-async def homepage(request: Request):
+async def home(request: Request):
+    try:
+        conn = psycopg2.connect(DB_CONN)
+        cur = conn.cursor()
+        cur.execute("INSERT INTO page_visits (page) VALUES ('home')")
+        conn.commit()
+        cur.close()
+        conn.close()
+    except Exception as e:
+        logger.error(f"Error logging page visit: {e}")
     return templates.TemplateResponse("index.html", {"request": request})
 
 @app.post("/api/contact")
-async def submit_contact(email: str = Form(...), message: str = Form(...), id: str = Form(default="")):
-    payload = {"id": id, "email": email, "message": message, "timestamp": time.time()}
+async def submit_contact(email: str = Form(...), message: str = Form(...)):
+    payload = {"type": "contact", "email": email, "message": message, "timestamp": time.time()}
     try:
         r = get_redis()
         r.rpush(REDIS_LIST, json.dumps(payload))
-        CONTACT_PUSHED.inc()
-        logger.info("Queued: %s", payload)
+        MESSAGE_PUSHED.inc()
+        logger.info("Queued contact: %s", payload)
         return {"status": "queued", "payload": payload}
     except Exception as e:
-        logger.exception("Failed to queue message")
-        raise HTTPException(status_code=500, detail="Failed to enqueue message")
+        logger.exception("Failed to queue contact")
+        raise HTTPException(status_code=500, detail="Failed to enqueue contact")
+
+@app.post("/api/survey/submit")
+async def submit_survey(response: SurveyResponse):
+    payload = {"type": "survey", "question": response.question, "answer": response.answer, "timestamp": time.time()}
+    try:
+        r = get_redis()
+        r.rpush(REDIS_LIST, json.dumps(payload))
+        MESSAGE_PUSHED.inc()
+        logger.info("Queued survey: %s", payload)
+        return {"status": "queued", "payload": payload}
+    except Exception as e:
+        logger.exception("Failed to queue survey")
+        raise HTTPException(status_code=500, detail="Failed to enqueue survey")
+
+@app.get("/api/survey/questions")
+async def get_survey_questions():
+    questions = [
+        {
+            "id": 1,
+            "text": "Jak oceniasz design strony?",
+            "type": "rating",
+            "options": ["1 - Słabo", "2", "3", "4", "5 - Doskonale"]
+        },
+        {
+            "id": 2,
+            "text": "Czy informacje były przydatne?",
+            "type": "choice",
+            "options": ["Tak", "Raczej tak", "Nie wiem", "Raczej nie", "Nie"]
+        },
+        {
+            "id": 3,
+            "text": "Jakie technologie Cię zainteresowały?",
+            "type": "multiselect",
+            "options": ["Python", "JavaScript", "React", "Kubernetes", "Docker", "PostgreSQL", "Vault"]
+        },
+        {
+            "id": 4,
+            "text": "Czy poleciłbyś tę stronę innym?",
+            "type": "choice",
+            "options": ["Zdecydowanie tak", "Prawdopodobnie tak", "Nie wiem", "Raczej nie", "Zdecydowanie nie"]
+        },
+        {
+            "id": 5,
+            "text": "Co sądzisz o portfolio?",
+            "type": "text",
+            "placeholder": "Podziel się swoją opinią..."
+        },
+        {
+            "id": 6,
+            "text": "Test AI jak to robi wykładowca na ćwiczeniach z studentami mają do wykorzystania obiekt",
+            "type": "text",
+            "placeholder": "Twoja odpowiedź na testowe pytanie..."
+        }
+    ]
+    return questions
+
+@app.get("/api/survey/stats")
+async def get_survey_stats():
+    try:
+        conn = psycopg2.connect(DB_CONN)
+        cur = conn.cursor()
+        cur.execute("SELECT question, answer, COUNT(*) as count FROM survey_responses GROUP BY question, answer ORDER BY question, count DESC")
+        responses = cur.fetchall()
+        cur.execute("SELECT COUNT(*) FROM page_visits")
+        total_visits = cur.fetchone()[0]
+        cur.execute("SELECT COUNT(*) FROM survey_responses")
+        total_responses = cur.fetchone()[0]
+        cur.close()
+        conn.close()
+        stats = {}
+        for question, answer, count in responses:
+            if question not in stats:
+                stats[question] = []
+            stats[question].append({"answer": answer, "count": count})
+        return {
+            "survey_responses": stats,
+            "total_visits": total_visits,
+            "total_responses": total_responses
+        }
+    except Exception as e:
+        logger.error(f"Error fetching survey stats: {e}")
+        raise HTTPException(status_code=500, detail="Błąd podczas pobierania statystyk")
 
 @app.get("/health")
 async def health():
@@ -112,8 +231,6 @@ if __name__ == "__main__":
 PY
 
   cat > "${APP_DIR}/worker.py" <<'PY'
-#!/usr/bin/env python3
-# app/worker.py - worker that BLPOP from Redis, publishes to Kafka and stores in Postgres
 import os, json, time, logging
 import redis
 from kafka import KafkaProducer
@@ -124,10 +241,10 @@ logger = logging.getLogger("worker")
 
 REDIS_HOST = os.getenv("REDIS_HOST", "redis")
 REDIS_PORT = int(os.getenv("REDIS_PORT", "6379"))
-REDIS_LIST = os.getenv("REDIS_LIST", "outgoing_messages")
+REDIS_LIST = os.getenv("REDIS_LIST", "messages")
 
 KAFKA_BOOTSTRAP = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka:9092")
-KAFKA_TOPIC = os.getenv("KAFKA_TOPIC", "survey-topic")
+KAFKA_TOPIC = os.getenv("KAFKA_TOPIC", "messages-topic")
 
 DATABASE_URL = os.getenv("DATABASE_URL", "dbname=webdb user=webuser password=testpassword host=postgres-db")
 
@@ -141,21 +258,21 @@ def get_kafka():
         logger.exception("Kafka init error: %s", e)
         return None
 
-def save_to_db(email, message):
-    conn = psycopg2.connect(DATABASE_URL)
-    cur = conn.cursor()
-    cur.execute("INSERT INTO contact_messages (email, message) VALUES (%s, %s)", (email, message))
-    conn.commit()
-    cur.close()
-    conn.close()
-
 def process_item(item, producer):
     try:
         if producer:
             producer.send(KAFKA_TOPIC, value=item)
             producer.flush()
-        save_to_db(item.get("email"), item.get("message"))
-        logger.info("Processed: %s", item.get("email"))
+        conn = psycopg2.connect(DATABASE_URL)
+        cur = conn.cursor()
+        if item.get("type") == "contact":
+            cur.execute("INSERT INTO contact_messages (email, message) VALUES (%s, %s)", (item.get("email"), item.get("message")))
+        elif item.get("type") == "survey":
+            cur.execute("INSERT INTO survey_responses (question, answer) VALUES (%s, %s)", (item.get("question"), item.get("answer")))
+        conn.commit()
+        cur.close()
+        conn.close()
+        logger.info("Processed: %s", item)
     except Exception:
         logger.exception("Processing failed")
 
@@ -184,42 +301,1120 @@ PY
   cat > "${TEMPLATES_DIR}/index.html" <<'HTML'
 <!DOCTYPE html>
 <html lang="pl">
-<head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title>Dawid Trojanowski - Kontakt</title>
-  <style>
-    body{font-family:system-ui,Arial;background:#0b1220;color:#e6eef8;padding:24px}
-    .card{max-width:720px;margin:auto;background:rgba(255,255,255,0.02);padding:18px;border-radius:10px}
-    input,textarea{width:100%;padding:8px;margin:6px 0;border-radius:6px;border:1px solid rgba(255,255,255,0.06);background:transparent;color:#fff}
-    button{background:#7c3aed;color:#fff;padding:10px 14px;border-radius:8px;border:none;cursor:pointer}
-  </style>
-</head>
-<body>
-  <div class="card">
-    <h1>Kontakt</h1>
-    <p>Wiadomość trafi do kolejki Redis; worker zapisze do Postgresa i wyśle do Kafki.</p>
-    <form id="contact-form">
-      <input name="email" type="email" placeholder="Twój email" required/>
-      <textarea name="message" rows="5" placeholder="Twoja wiadomość" required></textarea>
-      <input name="id" placeholder="opcjonalne id"/>
-      <button type="submit">Wyślij</button>
-    </form>
-    <div id="result" style="margin-top:12px;color:#bceeae"></div>
-  </div>
-  <script>
-    const f = document.getElementById('contact-form'), r = document.getElementById('result');
-    f.addEventListener('submit', async e=>{
-      e.preventDefault();
-      const fd = new FormData(f);
-      const res = await fetch('/api/contact', { method: 'POST', body: fd });
-      const j = await res.json().catch(()=>({}));
-      r.textContent = j.status || j.message || JSON.stringify(j);
-      setTimeout(()=>r.textContent = '',5000);
-      f.reset();
-    });
-  </script>
-</body>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Dawid Trojanowski - Strona Osobista</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+      @keyframes fadeIn {
+        from {
+          opacity: 0;
+          transform: translateY(10px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+      @keyframes typewriter {
+        from {
+          width: 0;
+        }
+        to {
+          width: 100%;
+        }
+      }
+      @keyframes blink {
+        from,
+        to {
+          border-color: transparent;
+        }
+        50% {
+          border-color: #c084fc;
+        }
+      }
+      .animate-fade-in {
+        animation: fadeIn 0.5s ease-out;
+      }
+      .typewriter {
+        overflow: hidden;
+        border-right: 2px solid #c084fc;
+        white-space: nowrap;
+        animation: typewriter 2s steps(40, end), blink 0.75s step-end infinite;
+      }
+      .parallax {
+        background-attachment: fixed;
+        background-position: center;
+        background-repeat: no-repeat;
+        background-size: cover;
+      }
+      .particle {
+        position: absolute;
+        border-radius: 50%;
+        background: radial-gradient(
+          circle,
+          rgba(168, 85, 247, 0.7) 0%,
+          rgba(236, 72, 153, 0.3) 70%,
+          transparent 100%
+        );
+        pointer-events: none;
+      }
+      .skill-bar {
+        height: 10px;
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 5px;
+        overflow: hidden;
+      }
+      .skill-progress {
+        height: 100%;
+        border-radius: 5px;
+        transition: width 1.5s ease-in-out;
+      }
+      .hamburger {
+        display: none;
+        flex-direction: column;
+        cursor: pointer;
+      }
+      .hamburger span {
+        width: 25px;
+        height: 3px;
+        background: #c084fc;
+        margin: 3px 0;
+        transition: 0.3s;
+      }
+      @media (max-width: 768px) {
+        .hamburger {
+          display: flex;
+        }
+        nav {
+          position: fixed;
+          top: 80px;
+          right: -100%;
+          width: 70%;
+          height: calc(100vh - 80px);
+          background: rgba(15, 23, 42, 0.95);
+          backdrop-filter: blur(10px);
+          flex-direction: column;
+          padding: 20px;
+          transition: 0.5s;
+          border-left: 1px solid rgba(168, 85, 247, 0.3);
+        }
+        nav.active {
+          right: 0;
+        }
+        .tab-btn {
+          margin: 10px 0;
+          text-align: left;
+          padding: 15px;
+          border-radius: 8px;
+          width: 100%;
+        }
+        .hamburger.active span:nth-child(1) {
+          transform: rotate(-45deg) translate(-5px, 6px);
+        }
+        .hamburger.active span:nth-child(2) {
+          opacity: 0;
+        }
+        .hamburger.active span:nth-child(3) {
+          transform: rotate(45deg) translate(-5px, -6px);
+        }
+      }
+    </style>
+  </head>
+  <body
+    class="bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 text-white min-h-screen transition-colors duration-500"
+  >
+    <!-- Floating particles -->
+    <div
+      id="particles-container"
+      class="fixed top-0 left-0 w-full h-full pointer-events-none z-0"
+    ></div>
+
+    <header
+      class="border-b border-purple-500/30 backdrop-blur-sm bg-black/20 sticky top-0 z-50 transition-colors duration-500"
+    >
+      <div class="container mx-auto px-6 py-4">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-3">
+            <svg
+              class="w-10 h-10 text-purple-400"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
+              ></path>
+            </svg>
+            <h1
+              class="text-3xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent"
+            >
+              Dawid Trojanowski
+            </h1>
+          </div>
+
+          <div class="flex items-center gap-4">
+            <!-- Theme Toggle -->
+            <button
+              id="theme-toggle"
+              class="p-2 rounded-full bg-purple-500/20 hover:bg-purple-500/40 transition-colors"
+            >
+              <svg
+                id="sun-icon"
+                class="w-6 h-6 text-yellow-300"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"
+                ></path>
+              </svg>
+              <svg
+                id="moon-icon"
+                class="w-6 h-6 text-purple-300 hidden"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"
+                ></path>
+              </svg>
+            </button>
+
+            <!-- Hamburger Menu -->
+            <div class="hamburger" id="hamburger">
+              <span></span>
+              <span></span>
+              <span></span>
+            </div>
+
+            <nav id="nav-menu" class="flex gap-4">
+              <button
+                onclick="showTab('intro')"
+                class="tab-btn px-4 py-2 rounded-lg transition-all text-purple-300"
+                data-tab="intro"
+              >
+                O Mnie
+              </button>
+              <button
+                onclick="showTab('edu')"
+                class="tab-btn px-4 py-2 rounded-lg transition-all text-purple-300"
+                data-tab="edu"
+              >
+                Edukacja
+              </button>
+              <button
+                onclick="showTab('exp')"
+                class="tab-btn px-4 py-2 rounded-lg transition-all text-purple-300"
+                data-tab="exp"
+              >
+                Doświadczenie
+              </button>
+              <button
+                onclick="showTab('skills')"
+                class="tab-btn px-4 py-2 rounded-lg transition-all text-purple-300"
+                data-tab="skills"
+              >
+                Umiejętności
+              </button>
+              <button
+                onclick="showTab('survey')"
+                class="tab-btn px-4 py-2 rounded-lg transition-all text-purple-300"
+                data-tab="survey"
+              >
+                Ankieta
+              </button>
+              <button
+                onclick="showTab('contact')"
+                class="tab-btn px-4 py-2 rounded-lg transition-all text-purple-300"
+                data-tab="contact"
+              >
+                Kontakt
+              </button>
+            </nav>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <main class="container mx-auto px-6 py-12 relative z-10">
+      <div id="intro-tab" class="tab-content">
+        <div class="space-y-8 animate-fade-in">
+          <div
+            class="bg-gradient-to-br from-purple-500/10 to-pink-500/10 backdrop-blur-lg border border-purple-500/20 rounded-2xl p-8"
+          >
+            <h2 class="text-4xl font-bold mb-6 text-purple-300 typewriter">
+              O Mnie
+            </h2>
+            <p class="text-lg text-gray-300 leading-relaxed mb-4">
+              Cześć! Jestem Dawidem Trojanowskim, pasjonatem informatyki i
+              nowych technologii. Zawsze dążyłem do rozwijania swoich
+              umiejętności w programowaniu i rozwiązywaniu złożonych problemów.
+              Moja ścieżka edukacyjna i zawodowa skupia się na informatyce
+              stosowanej, gdzie łączę teorię z praktyką.
+            </p>
+            <p class="text-lg text-gray-300 leading-relaxed">
+              Poza pracą interesuję się sportem, czytaniem książek i podróżami.
+              Lubię wyzwania, które pozwalają mi rosnąć zarówno zawodowo, jak i
+              osobowo.
+            </p>
+          </div>
+          <div class="grid md:grid-cols-3 gap=6">
+            <div
+              class="bg-gradient-to-br from-blue-500/10 to-purple-500/10 backdrop-blur-lg border border-blue-500/20 rounded-xl p-6 hover:scale-105 transition-transform cursor-pointer"
+              onclick="showTab('edu')"
+            >
+              <h3 class="text-xl font-bold mb-3 text-blue-300">Edukacja</h3>
+              <p class="text-gray-400">
+                Studia informatyczne na renomowanych uczelniach
+              </p>
+            </div>
+            <div
+              class="bg-gradient-to-br from-green-500/10 to-emerald-500/10 backdrop-blur-lg border border-green-500/20 rounded-xl p-6 hover:scale-105 transition-transform cursor-pointer"
+              onclick="showTab('exp')"
+            >
+              <h3 class="text-xl font-bold mb-3 text-green-300">
+                Doświadczenie
+              </h3>
+              <p class="text-gray-400">Praktyki i projekty w branży IT</p>
+            </div>
+            <div
+              class="bg-gradient-to-br from-pink-500/10 to-rose-500/10 backdrop-blur-lg border border-pink-500/20 rounded-xl p-6 hover:scale-105 transition-transform cursor-pointer"
+              onclick="showTab('survey')"
+            >
+              <h3 class="text-xl font-bold mb-3 text-pink-300">
+                Ankieta
+              </h3>
+              <p class="text-gray-400">Podziel się opinią o stronie</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="edu-tab" class="tab-content hidden">
+        <div class="space-y-6 animate-fade-in">
+          <h2 class="text-4xl font-bold mb-8 text-purple-300">Edukacja</h2>
+          <div
+            class="bg-gradient-to-br from-slate-800/50 to-slate-900/50 backdrop-blur-lg border border-purple-500/20 rounded-xl p-6"
+          >
+            <h3 class="text-2xl font-bold mb-4 text-purple-300">
+              Politechnika Warszawska
+            </h3>
+            <p class="text-gray-300 mb-4">Informatyka, studia magisterskie</p>
+            <ul class="space-y-2">
+              <li class="text-gray-400 flex items-center gap-2">
+                <span class="w-1.5 h-1.5 rounded-full bg-purple-400"></span>
+                Specjalizacja w sztucznej inteligencji i uczeniu maszynowem
+              </li>
+              <li class="text-gray-400 flex items-center gap-2">
+                <span class="w-1.5 h-1.5 rounded-full bg-purple-400"></span>
+                Praca dyplomowa: "Zastosowanie sieci neuronowych w analizie
+                danych"
+              </li>
+              <li class="text-gray-400 flex items-center gap-2">
+                <span class="w-1.5 h-1.5 rounded-full bg-purple-400"></span>
+                Średnia ocen: 4.5/5
+              </li>
+            </ul>
+          </div>
+          <div
+            class="bg-gradient-to-br from-slate-800/50 to-slate-900/50 backdrop-blur-lg border border-purple-500/20 rounded-xl p-6"
+          >
+            <h3 class="text-2xl font-bold mb-4 text-purple-300">
+              Uniwersytet Warszawski
+            </h3>
+            <p class="text-gray-300 mb-4">Informatyka, studia licencjackie</p>
+            <ul class="space-y-2">
+              <li class="text-gray-400 flex items-center gap-2">
+                <span class="w-1.5 h-1.5 rounded-full bg-purple-400"></span>
+                Podstawy programowania i algorytmiki
+              </li>
+              <li class="text-gray-400 flex items-center gap-2">
+                <span class="w-1.5 h-1.5 rounded-full bg-purple-400"></span>
+                Projekty grupowe w Java i Python
+              </li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div id="exp-tab" class="tab-content hidden">
+        <div class="space-y-6 animate-fade-in">
+          <h2 class="text-4xl font-bold mb-8 text-purple-300">
+            Doświadczenie Zawodowe
+          </h2>
+          <div
+            class="bg-gradient-to-br from-slate-800/50 to-slate-900/50 backdrop-blur-lg border border-purple-500/20 rounded-xl p-6"
+          >
+            <h3 class="text-2xl font-bold mb-4 text-purple-300">
+              Junior Developer - TechCorp
+            </h3>
+            <p class="text-gray-300 mb-4">Styczeń 2023 - Obecnie</p>
+            <ul class="space-y-2">
+              <li class="text-gray-400 flex items-center gap-2">
+                <span class="w-1.5 h-1.5 rounded-full bg-purple-400"></span>
+                Rozwój aplikacji webowych w React i Node.js
+              </li>
+              <li class="text-gray-400 flex items-center gap-2">
+                <span class="w-1.5 h-1.5 rounded-full bg-purple-400"></span>
+                Optymalizacja baz danych SQL
+              </li>
+              <li class="text-gray-400 flex items-center gap-2">
+                <span class="w-1.5 h-1.5 rounded-full bg-purple-400"></span>
+                Współpraca z zespołem w metodologii Agile
+              </li>
+            </ul>
+          </div>
+          <div
+            class="bg-gradient-to-br from-slate-800/50 to-slate-900/50 backdrop-blur-lg border border-purple-500/20 rounded-xl p-6"
+          >
+            <h3 class="text-2xl font-bold mb-4 text-purple-300">
+              Praktykant - Startup AI
+            </h3>
+            <p class="text-gray-300 mb-4">Czerwiec 2022 - Sierpień 2022</p>
+            <ul class="space-y-2">
+              <li class="text-gray-400 flex items-center gap-2">
+                <span class="w-1.5 h-1.5 rounded-full bg-purple-400"></span>
+                Implementacja modeli ML w Python
+              </li>
+              <li class="text-gray-400 flex items-center gap-2">
+                <span class="w-1.5 h-1.5 rounded-full bg-purple-400"></span>
+                Analiza danych z wykorzystaniem Pandas i Scikit-learn
+              </li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div id="skills-tab" class="tab-content hidden">
+        <div class="space-y-6 animate-fade-in">
+          <h2 class="text-4xl font-bold mb-8 text-purple-300">Umiejętności</h2>
+          <div class="grid md:grid-cols-2 gap-6">
+            <div
+              class="bg-gradient-to-br from-slate-800/50 to-slate-900/50 backdrop-blur-lg border border-purple-500/20 rounded-xl p-6"
+            >
+              <h3 class="text-2xl font-bold mb-4 text-purple-300">
+                Techniczne
+              </h3>
+              <div class="space-y-4">
+                <div>
+                  <div class="flex justify-between mb-1">
+                    <span class="text-gray-300">Python</span>
+                    <span class="text-purple-300">90%</span>
+                  </div>
+                  <div class="skill-bar">
+                    <div
+                      class="skill-progress bg-gradient-to-r from-purple-500 to-pink-500"
+                      data-width="90%"
+                    ></div>
+                  </div>
+                </div>
+                <div>
+                  <div class="flex justify-between mb-1">
+                    <span class="text-gray-300">JavaScript</span>
+                    <span class="text-purple-300">85%</span>
+                  </div>
+                  <div class="skill-bar">
+                    <div
+                      class="skill-progress bg-gradient-to-r from-purple-500 to-pink-500"
+                      data-width="85%"
+                    ></div>
+                  </div>
+                </div>
+                <div>
+                  <div class="flex justify-between mb-1">
+                    <span class="text-gray-300">React</span>
+                    <span class="text-purple-300">80%</span>
+                  </div>
+                  <div class="skill-bar">
+                    <div
+                      class="skill-progress bg-gradient-to-r from-purple-500 to-pink-500"
+                      data-width="80%"
+                    ></div>
+                  </div>
+                </div>
+                <div>
+                  <div class="flex justify-between mb-1">
+                    <span class="text-gray-300">SQL</span>
+                    <span class="text-purple-300">75%</span>
+                  </div>
+                  <div class="skill-bar">
+                    <div
+                      class="skill-progress bg-gradient-to-r from-purple-500 to-pink-500"
+                      data-width="75%"
+                    ></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div
+              class="bg-gradient-to-br from-slate-800/50 to-slate-900/50 backdrop-blur-lg border border-purple-500/20 rounded-xl p-6"
+            >
+              <h3 class="text-2xl font-bold mb-4 text-purple-300">Języki</h3>
+              <div class="space-y-4">
+                <div>
+                  <div class="flex justify-between mb-1">
+                    <span class="text-gray-300">Polski</span>
+                    <span class="text-purple-300">100%</span>
+                  </div>
+                  <div class="skill-bar">
+                    <div
+                      class="skill-progress bg-gradient-to-r from-purple-500 to-pink-500"
+                      data-width="100%"
+                    ></div>
+                  </div>
+                </div>
+                <div>
+                  <div class="flex justify-between mb-1">
+                    <span class="text-gray-300">Angielski</span>
+                    <span class="text-purple-300">85%</span>
+                  </div>
+                  <div class="skill-bar">
+                    <div
+                      class="skill-progress bg-gradient-to-r from-purple-500 to-pink-500"
+                      data-width="85%"
+                    ></div>
+                  </div>
+                </div>
+                <div>
+                  <div class="flex justify-between mb-1">
+                    <span class="text-gray-300">Niemiecki</span>
+                    <span class="text-purple-300">40%</span>
+                  </div>
+                  <div class="skill-bar">
+                    <div
+                      class="skill-progress bg-gradient-to-r from-purple-500 to-pink-500"
+                      data-width="40%"
+                    ></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- NOWA ZAKŁADKA: ANKIETA -->
+      <div id="survey-tab" class="tab-content hidden">
+        <div class="space-y-8 animate-fade-in">
+          <div
+            class="bg-gradient-to-br from-purple-500/10 to-pink-500/10 backdrop-blur-lg border border-purple-500/20 rounded-2xl p-8"
+          >
+            <h2 class="text-4xl font-bold mb-6 text-purple-300">Ankieta</h2>
+            <p class="text-lg text-gray-300 mb-8">
+              Podziel się swoją opinią o mojej stronie! Twoje odpowiedzi pomogą mi ulepszyć treści i design.
+            </p>
+           
+            <form id="survey-form" class="space-y-6">
+              <div id="survey-questions">
+                <!-- Pytania będą ładowane dynamicznie -->
+              </div>
+             
+              <button
+                type="submit"
+                class="w-full py-3 px-4 rounded-lg bg-purple-500 text-white hover:bg-purple-600 transition-all"
+              >
+                Wyślij ankietę
+              </button>
+            </form>
+           
+            <div id="survey-message" class="mt-4 hidden p-3 rounded-lg"></div>
+          </div>
+
+          <div
+            class="bg-gradient-to-br from-purple-500/10 to-pink-500/10 backdrop-blur-lg border border-purple-500/20 rounded-2xl p-8"
+          >
+            <h3 class="text-2xl font-bold mb-6 text-purple-300">Statystyki ankiet</h3>
+            <div class="grid md:grid-cols-2 gap-6">
+              <div class="space-y-4">
+                <div id="survey-stats">
+                  <!-- Statystyki będą ładowane dynamicznie -->
+                </div>
+              </div>
+              <div class="space-y-4">
+                <canvas id="survey-chart" width="400" height="200"></canvas>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="contact-tab" class="tab-content hidden">
+        <div class="space-y-8 animate-fade-in">
+          <div
+            class="bg-gradient-to-br from-purple-500/10 to-pink-500/10 backdrop-blur-lg border border-purple-500/20 rounded-2xl p-8"
+          >
+            <h2 class="text-4xl font-bold mb-6 text-purple-300">Kontakt</h2>
+            <p class="text-lg text-gray-300 mb-8">
+              Chętnie porozmawiam o możliwościach współpracy lub po prostu o
+              pasjach!
+            </p>
+            <div class="grid md:grid-cols-2 gap-6">
+              <div class="space-y-4">
+                <form id="contact-form">
+                  <div>
+                    <label class="block text-gray-400 mb-2">Email</label>
+                    <input
+                      type="email"
+                      id="email-input"
+                      name="email"
+                      placeholder="Twój email"
+                      class="w-full py-3 px-4 rounded-lg bg-slate-700 text-white border border-purple-500/30 focus:border-purple-400 outline-none transition-colors"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label class="block text-gray-400 mb-2">Wiadomość</label>
+                    <textarea
+                      id="message-input"
+                      name="message"
+                      placeholder="Twoja wiadomość"
+                      rows="4"
+                      class="w-full py-3 px-4 rounded-lg bg-slate-700 text-white border border-purple-500/30 focus:border-purple-400 outline-none transition-colors"
+                      required
+                    ></textarea>
+                  </div>
+                  <button
+                    type="submit"
+                    id="send-btn"
+                    class="w-full mt-4 py-3 px-4 rounded-lg bg-purple-500 text-white hover:bg-purple-600 transition-all"
+                  >
+                    Wyślij
+                  </button>
+                </form>
+                <div id="form-message" class="mt-4 hidden p-3 rounded-lg"></div>
+              </div>
+              <div class="space-y-4">
+                <div
+                  class="bg-slate-800/50 rounded-xl p-4 hover:bg-slate-700/50 transition-colors"
+                >
+                  <p class="text-gray-400 mb-1">Email</p>
+                  <p class="text-purple-300">dawid.trojanowski@example.com</p>
+                </div>
+                <div
+                  class="bg-slate-800/50 rounded-xl p-4 hover:bg-slate-700/50 transition-colors"
+                >
+                  <p class="text-gray-400 mb-1">LinkedIn</p>
+                  <p class="text-purple-300">
+                    linkedin.com/in/dawid-trojanowski
+                  </p>
+                </div>
+                <div
+                  class="bg-slate-800/50 rounded-xl p-4 hover:bg-slate-700/50 transition-colors"
+                >
+                  <p class="text-gray-400 mb-1">GitHub</p>
+                  <p class="text-purple-300">github.com/dawidtrojanowski</p>
+                </div>
+                <div
+                  class="bg-slate-800/50 rounded-xl p-4 hover:bg-slate-700/50 transition-colors"
+                >
+                  <p class="text-gray-400 mb-1">Telefon</p>
+                  <p class="text-purple-300">+48 123 456 789</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <footer
+      class="border-t border-purple-500/30 backdrop-blur-sm bg-black/20 mt-16 transition-colors duration-500"
+    >
+      <div class="container mx-auto px-6 py-8 text-center text-gray-400">
+        <p>Dawid Trojanowski © 2025</p>
+      </div>
+    </footer>
+
+    <script>
+      // Tab switching functionality
+      function showTab(tabName) {
+        document.querySelectorAll(".tab-content").forEach((tab) => {
+          tab.classList.add("hidden");
+          tab.classList.remove("animate-fade-in");
+        });
+
+        setTimeout(() => {
+          const activeTab = document.getElementById(tabName + "-tab");
+          activeTab.classList.remove("hidden");
+          activeTab.classList.add("animate-fade-in");
+
+          // Animate skill bars when skills tab is shown
+          if (tabName === "skills") {
+            setTimeout(animateSkillBars, 300);
+          }
+         
+          // Load survey data when survey tab is shown
+          if (tabName === "survey") {
+            loadSurveyQuestions();
+            loadSurveyStats();
+          }
+        }, 50);
+
+        document.querySelectorAll(".tab-btn").forEach((btn) => {
+          btn.classList.remove("bg-purple-500", "text-white");
+          btn.classList.add("text-purple-300");
+        });
+        document
+          .querySelector(`[data-tab="${tabName}"]`)
+          .classList.add("bg-purple-500", "text-white");
+
+        // Close mobile menu if open
+        closeMobileMenu();
+      }
+
+      // Theme toggle functionality
+      const themeToggle = document.getElementById("theme-toggle");
+      const sunIcon = document.getElementById("sun-icon");
+      const moonIcon = document.getElementById("moon-icon");
+
+      themeToggle.addEventListener("click", () => {
+        document.body.classList.toggle("light-mode");
+
+        if (document.body.classList.contains("light-mode")) {
+          document.body.className =
+            "bg-gradient-to-br from-slate-100 via-purple-100 to-slate-100 text-slate-800 min-h-screen transition-colors duration-500";
+          sunIcon.classList.add("hidden");
+          moonIcon.classList.remove("hidden");
+        } else {
+          document.body.className =
+            "bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 text-white min-h-screen transition-colors duration-500";
+          sunIcon.classList.remove("hidden");
+          moonIcon.classList.add("hidden");
+        }
+      });
+
+      // Mobile menu functionality
+      const hamburger = document.getElementById("hamburger");
+      const navMenu = document.getElementById("nav-menu");
+
+      function toggleMobileMenu() {
+        hamburger.classList.toggle("active");
+        navMenu.classList.toggle("active");
+      }
+
+      function closeMobileMenu() {
+        hamburger.classList.remove("active");
+        navMenu.classList.remove("active");
+      }
+
+      hamburger.addEventListener("click", toggleMobileMenu);
+
+      // Close menu when clicking outside
+      document.addEventListener("click", (e) => {
+        if (!hamburger.contains(e.target) && !navMenu.contains(e.target)) {
+          closeMobileMenu();
+        }
+      });
+
+      // Skill bars animation
+      function animateSkillBars() {
+        const skillBars = document.querySelectorAll(".skill-progress");
+        skillBars.forEach((bar) => {
+          const width = bar.getAttribute("data-width");
+          bar.style.width = width;
+        });
+      }
+
+      // Contact form functionality
+      document.getElementById('contact-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+       
+        const email = document.getElementById('email-input').value.trim();
+        const message = document.getElementById('message-input').value.trim();
+        const formMessage = document.getElementById('form-message');
+
+        if (!email || !message) {
+          showFormMessage("Proszę wypełnić wszystkie pola", "error");
+          return;
+        }
+
+        if (!validateEmail(email)) {
+          showFormMessage("Proszę podać poprawny adres email", "error");
+          return;
+        }
+
+        try {
+          const formData = new FormData();
+          formData.append('email', email);
+          formData.append('message', message);
+
+          const response = await fetch('/api/contact', {
+            method: 'POST',
+            body: formData
+          });
+
+          const result = await response.json();
+
+          if (response.ok) {
+            showFormMessage(result.message, "success");
+            document.getElementById('email-input').value = "";
+            document.getElementById('message-input').value = "";
+          } else {
+            showFormMessage(result.detail || "Wystąpił błąd podczas wysyłania", "error");
+          }
+        } catch (error) {
+          console.error('Error sending contact form:', error);
+          showFormMessage("Wystąpił błąd podczas wysyłania wiadomości", "error");
+        }
+      });
+
+      function validateEmail(email) {
+        const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        return re.test(email);
+      }
+
+      function showFormMessage(text, type) {
+        const formMessage = document.getElementById('form-message');
+        formMessage.textContent = text;
+        formMessage.className = "mt-4 p-3 rounded-lg";
+
+        if (type === "error") {
+          formMessage.classList.add(
+            "bg-red-500/20",
+            "text-red-300",
+            "border",
+            "border-red-500/30"
+          );
+        } else {
+          formMessage.classList.add(
+            "bg-green-500/20",
+            "text-green-300",
+            "border",
+            "border-green-500/30"
+          );
+        }
+
+        formMessage.classList.remove("hidden");
+
+        setTimeout(() => {
+          formMessage.classList.add("hidden");
+        }, 5000);
+      }
+
+      // Floating particles effect
+      function createParticles() {
+        const container = document.getElementById("particles-container");
+        const particleCount = 30;
+
+        for (let i = 0; i < particleCount; i++) {
+          const particle = document.createElement("div");
+          particle.classList.add("particle");
+
+          const size = Math.random() * 60 + 20;
+          particle.style.width = `${size}px`;
+          particle.style.height = `${size}px`;
+
+          particle.style.left = `${Math.random() * 100}%`;
+          particle.style.top = `${Math.random() * 100}%`;
+
+          const animationDuration = Math.random() * 20 + 10;
+          particle.style.animation = `float ${animationDuration}s infinite ease-in-out`;
+
+          container.appendChild(particle);
+        }
+      }
+
+      // Survey functionality
+      async function loadSurveyQuestions() {
+        try {
+          const response = await fetch('/api/survey/questions');
+          const questions = await response.json();
+         
+          const container = document.getElementById('survey-questions');
+          container.innerHTML = '';
+         
+          questions.forEach((q, index) => {
+            const questionDiv = document.createElement('div');
+            questionDiv.className = 'space-y-3';
+           
+            questionDiv.innerHTML = `
+              <label class="block text-gray-300 font-semibold">
+                ${q.text}
+              </label>
+            `;
+           
+            if (q.type === 'rating') {
+              questionDiv.innerHTML += `
+                <div class="flex gap-2 flex-wrap">
+                  ${q.options.map(option => `
+                    <label class="flex items-center space-x-2 cursor-pointer">
+                      <input type="radio" name="question_${q.id}" value="${option}" class="hidden peer" required>
+                      <span class="px-4 py-2 rounded-lg bg-slate-700 text-gray-300 peer-checked:bg-purple-500 peer-checked:text-white transition-all hover:bg-slate-600">
+                        ${option}
+                      </span>
+                    </label>
+                  `).join('')}
+                </div>
+              `;
+            } else if (q.type === 'choice') {
+              questionDiv.innerHTML += `
+                <div class="space-y-2">
+                  ${q.options.map(option => `
+                    <label class="flex items-center space-x-3 cursor-pointer">
+                      <input type="radio" name="question_${q.id}" value="${option}" class="text-purple-500 focus:ring-purple-500" required>
+                      <span class="text-gray-300">${option}</span>
+                    </label>
+                  `).join('')}
+                </div>
+              `;
+            } else if (q.type === 'multiselect') {
+              questionDiv.innerHTML += `
+                <div class="space-y-2">
+                  ${q.options.map(option => `
+                    <label class="flex items-center space-x-3 cursor-pointer">
+                      <input type="checkbox" name="question_${q.id}" value="${option}" class="text-purple-500 focus:ring-purple-500">
+                      <span class="text-gray-300">${option}</span>
+                    </label>
+                  `).join('')}
+                </div>
+              `;
+            } else if (q.type === 'text') {
+              questionDiv.innerHTML += `
+                <textarea
+                  name="question_${q.id}"
+                  placeholder="${q.placeholder}"
+                  class="w-full py-3 px-4 rounded-lg bg-slate-700 text-white border border-purple-500/30 focus:border-purple-400 outline-none transition-colors"
+                  rows="3"
+                ></textarea>
+              `;
+            }
+           
+            container.appendChild(questionDiv);
+          });
+        } catch (error) {
+          console.error('Error loading survey questions:', error);
+        }
+      }
+
+      async function loadSurveyStats() {
+        try {
+          const response = await fetch('/api/survey/stats');
+          const stats = await response.json();
+         
+          const container = document.getElementById('survey-stats');
+         
+          if (stats.total_responses === 0) {
+            container.innerHTML = `
+              <div class="text-center text-gray-400 py-8">
+                <p>Brak odpowiedzi na ankietę.</p>
+                <p class="text-sm mt-2">Bądź pierwszą osobą która wypełni ankietę!</p>
+              </div>
+            `;
+            return;
+          }
+         
+          let statsHTML = `
+            <div class="space-y-4">
+              <div class="grid grid-cols-2 gap-4 text-center">
+                <div class="bg-slate-800/50 rounded-lg p-4">
+                  <div class="text-2xl font-bold text-purple-300">${stats.total_visits}</div>
+                  <div class="text-sm text-gray-400">Odwiedzin</div>
+                </div>
+                <div class="bg-slate-800/50 rounded-lg p-4">
+                  <div class="text-2xl font-bold text-purple-300">${stats.total_responses}</div>
+                  <div class="text-sm text-gray-400">Odpowiedzi</div>
+                </div>
+              </div>
+          `;
+         
+          for (const [question, answers] of Object.entries(stats.survey_responses)) {
+            statsHTML += `
+              <div class="border-t border-purple-500/20 pt-4">
+                <h4 class="font-semibold text-purple-300 mb-2">${question}</h4>
+                <div class="space-y-2">
+            `;
+           
+            answers.forEach(item => {
+              statsHTML += `
+                <div class="flex justify-between items-center">
+                  <span class="text-gray-300 text-sm">${item.answer}</span>
+                  <span class="text-purple-300 font-semibold">${item.count}</span>
+                </div>
+              `;
+            });
+           
+            statsHTML += `
+                </div>
+              </div>
+            `;
+          }
+         
+          statsHTML += `</div>`;
+          container.innerHTML = statsHTML;
+         
+          // Update chart if there are responses
+          updateSurveyChart(stats);
+        } catch (error) {
+          console.error('Error loading survey stats:', error);
+          document.getElementById('survey-stats').innerHTML = `
+            <div class="text-red-300 text-center py-4">
+              Błąd podczas ładowania statystyk
+            </div>
+          `;
+        }
+      }
+
+      function updateSurveyChart(stats) {
+        const ctx = document.getElementById('survey-chart').getContext('2d');
+       
+        // Prepare data for chart
+        const labels = [];
+        const data = [];
+       
+        for (const [question, answers] of Object.entries(stats.survey_responses)) {
+          answers.forEach(item => {
+            labels.push(`${question}: ${item.answer}`);
+            data.push(item.count);
+          });
+        }
+       
+        new Chart(ctx, {
+          type: 'doughnut',
+          data: {
+            labels: labels,
+            datasets: [{
+              data: data,
+              backgroundColor: [
+                '#a855f7', '#ec4899', '#8b5cf6', '#d946ef', '#7c3aed',
+                '#c026d3', '#6d28d9', '#a21caf', '#5b21b6', '#86198f'
+              ],
+              borderWidth: 2,
+              borderColor: '#1e293b'
+            }]
+          },
+          options: {
+            responsive: true,
+            plugins: {
+              legend: {
+                position: 'bottom',
+                labels: {
+                  color: '#cbd5e1',
+                  font: {
+                    size: 10
+                  }
+                }
+              }
+            }
+          }
+        });
+      }
+
+      // Survey form submission
+      document.getElementById('survey-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+       
+        const formData = new FormData(e.target);
+        const responses = [];
+       
+        // Collect all responses
+        for (let i = 1; i <= 6; i++) {  // Updated to 6 questions
+          const questionName = `question_${i}`;
+          const questionElement = e.target.elements[questionName];
+         
+          if (questionElement) {
+            if (questionElement.type === 'radio') {
+              const selected = document.querySelector(`input[name="question_${i}"]:checked`);
+              if (selected) {
+                responses.push({
+                  question: `Pytanie ${i}: ${document.querySelector(\`label[for="question_${i}"]\`)?.textContent || questionName}`,
+                  answer: selected.value
+                });
+              }
+            } else if (questionElement.type === 'checkbox') {
+              const selected = document.querySelectorAll(`input[name="question_${i}"]:checked`);
+              if (selected.length > 0) {
+                const answers = Array.from(selected).map(cb => cb.value).join(', ');
+                responses.push({
+                  question: `Pytanie ${i}: ${document.querySelector(\`label[for="question_${i}"]\`)?.textContent || questionName}`,
+                  answer: answers
+                });
+              }
+            } else if (questionElement.tagName === 'TEXTAREA' && questionElement.value.trim()) {
+              responses.push({
+                question: `Pytanie ${i}: ${document.querySelector(\`label[for="question_${i}"]\`)?.textContent || questionName}`,
+                answer: questionElement.value.trim()
+              });
+            }
+          }
+        }
+       
+        if (responses.length === 0) {
+          showSurveyMessage('Proszę odpowiedzieć na przynajmniej jedno pytanie', 'error');
+          return;
+        }
+       
+        try {
+          // Send each response
+          for (const response of responses) {
+            await fetch('/api/survey/submit', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify(response)
+            });
+          }
+         
+          showSurveyMessage('Dziękujemy za wypełnienie ankiety!', 'success');
+          e.target.reset();
+          loadSurveyStats(); // Reload stats
+        } catch (error) {
+          console.error('Error submitting survey:', error);
+          showSurveyMessage('Wystąpił błąd podczas wysyłania ankiety', 'error');
+        }
+      });
+
+      function showSurveyMessage(text, type) {
+        const messageDiv = document.getElementById('survey-message');
+        messageDiv.textContent = text;
+        messageDiv.className = 'mt-4 p-3 rounded-lg';
+       
+        if (type === 'error') {
+          messageDiv.classList.add('bg-red-500/20', 'text-red-300', 'border', 'border-red-500/30');
+        } else {
+          messageDiv.classList.add('bg-green-500/20', 'text-green-300', 'border', 'border-green-500/30');
+        }
+       
+        messageDiv.classList.remove('hidden');
+       
+        setTimeout(() => {
+          messageDiv.classList.add('hidden');
+        }, 5000);
+      }
+
+      // Initialize on page load
+      document.addEventListener("DOMContentLoaded", () => {
+        showTab("intro");
+        createParticles();
+
+        // Add floating animation
+        const style = document.createElement("style");
+        style.textContent = `
+          @keyframes float {
+            0%, 100% { transform: translate(0, 0) rotate(0deg); }
+            25% { transform: translate(10px, -10px) rotate(5deg); }
+            50% { transform: translate(-5px, 5px) rotate(-5deg); }
+            75% { transform: translate(-10px, -5px) rotate(3deg); }
+          }
+        `;
+        document.head.appendChild(style);
+      });
+    </script>
+  </body>
 </html>
 HTML
 
@@ -354,7 +1549,7 @@ spec:
         - name: REDIS_PORT
           value: "6379"
         - name: REDIS_LIST
-          value: "outgoing_messages"
+          value: "messages"
         - name: KAFKA_BOOTSTRAP_SERVERS
           value: "kafka.${NAMESPACE}.svc.cluster.local:9092"
         - name: DATABASE_URL
@@ -433,7 +1628,7 @@ spec:
         - name: REDIS_PORT
           value: "6379"
         - name: REDIS_LIST
-          value: "outgoing_messages"
+          value: "messages"
         - name: KAFKA_BOOTSTRAP_SERVERS
           value: "kafka.${NAMESPACE}.svc.cluster.local:9092"
         - name: DATABASE_URL
@@ -1139,6 +2334,7 @@ Quickstart:
 Notes:
 - Vault runs with disable_mlock=true in manifest to avoid IPC_LOCK issues on some nodes.
 - Replace example passwords and Vault dev-mode with proper secrets before production.
+- Dane z formularzy (contact i survey) przechodzą przez Redis -> Kafka -> Postgres.
 README
   info "README written."
 }

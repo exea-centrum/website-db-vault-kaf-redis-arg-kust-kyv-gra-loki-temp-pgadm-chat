@@ -29,7 +29,7 @@ spec:
         - name: REDIS_PORT
           value: "6379"
         - name: REDIS_LIST
-          value: "messages"
+          value: "outgoing_messages"
         - name: KAFKA_BOOTSTRAP_SERVERS
           value: "kafka.davtrowebdbvault.svc.cluster.local:9092"
         - name: DATABASE_URL
