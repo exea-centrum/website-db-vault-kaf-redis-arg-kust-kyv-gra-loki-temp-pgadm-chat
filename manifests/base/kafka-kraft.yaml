@@ -21,7 +21,7 @@ spec:
     spec:
       containers:
         - name: kafka
-          image: bitnami/kafka:3.8.0-debian-12-r1
+          image: bitnami/kafka:3.8.0-debian-12-r3
           env:
             - name: KAFKA_CFG_NODE_ID
               value: "1"
