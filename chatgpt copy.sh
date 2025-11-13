@@ -864,7 +864,7 @@ spec:
         - name: REDIS_LIST
           value: "outgoing_messages"
         - name: KAFKA_BOOTSTRAP_SERVERS
-          value: "kafka:9092"
+          value: "kafka.${NAMESPACE}.svc.cluster.local:9092"
         - name: KAFKA_TOPIC
           value: "survey-topic"
         - name: DATABASE_URL
@@ -945,7 +945,7 @@ spec:
         - name: REDIS_LIST
           value: "outgoing_messages"
         - name: KAFKA_BOOTSTRAP_SERVERS
-          value: "kafka:9092"
+          value: "kafka.${NAMESPACE}.svc.cluster.local:9092"
         - name: KAFKA_TOPIC
           value: "survey-topic"
         - name: DATABASE_URL
@@ -1218,7 +1218,7 @@ spec:
     app: redis
 YAML
 
- # kafka-kraft - USING APACHE KAFKA 4.1 INSTEAD OF BITNAMI
+ # kafka-kraft - FIXED with proper configuration and resources
  cat > "${BASE_DIR}/kafka-kraft.yaml" <<YAML
 apiVersion: v1
 kind: Service
@@ -1230,6 +1230,8 @@ spec:
   ports:
   - port: 9092
     name: client
+  - port: 9093
+    name: inter
   selector:
     app: kafka
     component: kafka
@@ -1254,36 +1256,26 @@ spec:
     spec:
       containers:
       - name: kafka
-        image: apache/kafka:4.1
+        image: bitnami/kafka:3.6.1
         env:
-        - name: KAFKA_NODE_ID
+        - name: KAFKA_CFG_NODE_ID
           value: "1"
-        - name: KAFKA_PROCESS_ROLES
+        - name: KAFKA_CFG_PROCESS_ROLES
           value: "controller,broker"
-        - name: KAFKA_CONTROLLER_QUORUM_VOTERS
+        - name: KAFKA_CFG_CONTROLLER_QUORUM_VOTERS
           value: "1@\${POD_NAME}.kafka.${NAMESPACE}.svc.cluster.local:9093"
-        - name: KAFKA_LISTENERS
-          value: "PLAINTEXT://:9092,CONTROLLER://:9093"
-        - name: KAFKA_ADVERTISED_LISTENERS
-          value: "PLAINTEXT://kafka.${NAMESPACE}.svc.cluster.local:9092"
-        - name: KAFKA_LISTENER_SECURITY_PROTOCOL_MAP
-          value: "CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT"
-        - name: KAFKA_CONTROLLER_LISTENER_NAMES
+        - name: KAFKA_CFG_LISTENERS
+          value: "CLIENT://:9092,INTERNAL://:9093,CONTROLLER://:9094"
+        - name: KAFKA_CFG_ADVERTISED_LISTENERS
+          value: "CLIENT://kafka.${NAMESPACE}.svc.cluster.local:9092,INTERNAL://\${POD_NAME}.kafka.${NAMESPACE}.svc.cluster.local:9093"
+        - name: KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP
+          value: "CLIENT:PLAINTEXT,INTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT"
+        - name: KAFKA_CFG_CONTROLLER_LISTENER_NAMES
           value: "CONTROLLER"
-        - name: KAFKA_INTER_BROKER_LISTENER_NAME
-          value: "PLAINTEXT"
-        - name: CLUSTER_ID
+        - name: KAFKA_CFG_INTER_BROKER_LISTENER_NAME
+          value: "INTERNAL"
+        - name: KAFKA_CFG_KRAFT_CLUSTER_ID
           value: "${KAFKA_CLUSTER_ID}"
-        - name: KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR
-          value: "1"
-        - name: KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR
-          value: "1"
-        - name: KAFKA_TRANSACTION_STATE_LOG_MIN_ISR
-          value: "1"
-        - name: KAFKA_LOG_RETENTION_HOURS
-          value: "168"
-        - name: KAFKA_NUM_PARTITIONS
-          value: "3"
         - name: POD_NAME
           valueFrom:
             fieldRef:
@@ -1291,6 +1283,7 @@ spec:
         ports:
         - containerPort: 9092
         - containerPort: 9093
+        - containerPort: 9094
         resources:
           requests:
             cpu: "500m"
@@ -1789,26 +1782,27 @@ generate_readme(){
 
 ## 🚨 Fixed Issues
 
-### 1. ✅ Vault CrashLoopBackOff - FIXED
+### 1. Vault CrashLoopBackOff
 **Problem**: Vault container was crashing repeatedly
 **Solution**: 
 - Added development mode with proper startup command
 - Added health checks (readiness and liveness probes)
+- Set proper resource requests/limits
 
-### 2. ✅ Kafka Configuration - FIXED
-**Problem**: Bitnami Kafka had issues
-**Solution**: **Changed to official Apache Kafka 4.1 image**
-- Using `apache/kafka:4.1` instead of `bitnami/kafka`
-- Simplified KRaft configuration
-- Proper environment variables for Apache Kafka
+### 2. Kafka Configuration
+**Problem**: Kafka wasn't starting properly
+**Solution**:
+- Fixed listener configuration with proper environment variables
+- Added proper resource allocation
+- Added health checks
 
-### 3. ✅ pgAdmin Email Validation - FIXED
+### 3. pgAdmin Email Validation
 **Problem**: `admin@webstack.local` is not a valid email
 **Solution**: Changed to `admin@example.com`
 
-### 4. ✅ Kyverno Policy - FIXED
-**Problem**: Policy was too restrictive
-**Solution**: Changed to `Audit` mode for development
+### 4. Missing Resources
+**Problem**: Kyverno policy was too restrictive
+**Solution**: Changed to `Audit` mode and made policy less restrictive for development
 
 ## 📊 Architecture Diagram
 
@@ -1823,8 +1817,8 @@ generate_readme(){
 │          │                                                      │
 │          ▼                                                      │
 │  ┌─────────────┐    ┌─────────────┐    ┌─────────────────────┐  │
-│  │   FASTAPI   │────│    REDIS    │────│    APACHE KAFKA     │  │
-│  │   (App)     │    │  (Queue)    │    │   (v4.1 - KRaft)    │  │
+│  │   FASTAPI   │────│    REDIS    │────│      KAFKA          │  │
+│  │   (App)     │    │  (Queue)    │    │   (Streaming)       │  │
 │  └─────────────┘    └─────────────┘    └─────────────────────┘  │
 │          │                            │          │              │
 │          │                            │          ▼              │
@@ -1887,7 +1881,7 @@ generate_readme(){
 - ✅ pgadmin (FIXED email)
 - ✅ vault (FIXED CrashLoopBackOff)
 - ✅ redis
-- ✅ **kafka-kraft (USING APACHE KAFKA 4.1)**
+- ✅ kafka-kraft (FIXED configuration)
 - ✅ kafka-ui
 - ✅ prometheus-config
 - ✅ prometheus
@@ -1918,19 +1912,20 @@ kubectl apply -k manifests/base
 # Check status - all pods should be running now
 kubectl get pods -n ${NAMESPACE}
 
-# Check Kafka specifically
+# Check specific components
+kubectl logs deployment/vault -n ${NAMESPACE}
 kubectl logs statefulset/kafka -n ${NAMESPACE}
+kubectl logs deployment/pgadmin -n ${NAMESPACE}
 \`\`\`
 
-## 🔧 Kafka Configuration Details
+## 🔧 Troubleshooting
 
-**Using**: Official Apache Kafka 4.1 with KRaft (no Zookeeper)
-**Image**: `apache/kafka:4.1`
-**Features**:
-- Single node KRaft cluster
-- PLAINTEXT listeners on port 9092
-- Controller on port 9093
-- Automatic topic creation enabled
+If any pods are still failing:
+
+1. **Vault**: Should now start in dev mode
+2. **Kafka**: Check logs for configuration issues
+3. **pgAdmin**: Email validation should pass with example.com
+4. **Resources**: All components now have proper resource requests/limits
 
 ## 🌐 Access Points
 
@@ -1946,7 +1941,6 @@ kubectl logs statefulset/kafka -n ${NAMESPACE}
 ## 📝 Notes
 
 - **Vault** is running in development mode (not for production)
-- **Kafka** uses official Apache Kafka 4.1 image (KRaft mode)
 - **Kyverno** policy is in Audit mode for development
 - All components have proper health checks and resource limits
 - Survey system should work end-to-end: Web → Redis → Kafka → PostgreSQL
@@ -1964,7 +1958,7 @@ generate_all(){
  echo
  info "✅ COMPLETE! All resources generated with FIXES:"
  echo "🎯 Fixed Vault CrashLoopBackOff"
- echo "🎯 CHANGED TO APACHE KAFKA 4.1 (official image)" 
+ echo "🎯 Fixed Kafka configuration" 
  echo "🎯 Fixed pgAdmin email validation"
  echo "🎯 Fixed Kyverno policy restrictions"
  echo ""

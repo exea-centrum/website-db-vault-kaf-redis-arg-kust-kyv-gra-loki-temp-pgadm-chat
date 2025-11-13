@@ -32,7 +32,7 @@ spec:
         - name: REDIS_LIST
           value: "outgoing_messages"
         - name: KAFKA_BOOTSTRAP_SERVERS
-          value: "kafka.davtrowebdbvault.svc.cluster.local:9092"
+          value: "kafka:9092"
         - name: KAFKA_TOPIC
           value: "survey-topic"
         - name: DATABASE_URL
