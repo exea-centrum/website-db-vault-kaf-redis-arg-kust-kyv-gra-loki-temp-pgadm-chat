@@ -3,38 +3,47 @@ kind: StatefulSet
 metadata:
   name: tempo
   namespace: davtrowebdbvault
+  labels:
+    app: tempo
+    app.kubernetes.io/instance: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
 spec:
-  serviceName: tempo
   replicas: 1
   selector:
     matchLabels:
       app: tempo
+  serviceName: tempo
   template:
     metadata:
       labels:
         app: tempo
     spec:
       containers:
-      - name: tempo
-        image: grafana/tempo:2.4.2
-        ports:
-        - containerPort: 3200
-        resources:
-          requests:
-            cpu: "100m"
-            memory: "256Mi"
-          limits:
-            cpu: "250m"
-            memory: "512Mi"
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: tempo
-  namespace: davtrowebdbvault
-spec:
-  ports:
-  - port: 3200
-    targetPort: 3200
-  selector:
-    app: tempo
+        - name: tempo
+          image: grafana/tempo:2.4.2
+          ports:
+            - containerPort: 3200
+          resources:
+            limits:
+              cpu: "250m"
+              memory: "512Mi"
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+          env:
+            - name: TEMPO_STORAGE_TRACE_BACKEND
+              value: "local"
+            - name: TEMPO_STORAGE_TRACE_LOCAL_PATH
+              value: "/tmp/tempo/traces"
+          volumeMounts:
+            - name: tempo-storage
+              mountPath: /tmp/tempo
+          args:
+            - -config.file=/etc/tempo/tempo.yaml
+            - -storage.trace.backend=local
+            - -storage.trace.local.path=/tmp/tempo/traces
+            - -compactor.compaction.window=1h
+            - -compactor.compaction.block-retention=24h
+            - -compactor.compaction.compacted-block-retention=1h
+      volumes:
+        - name: tempo-storage
+          emptyDir: {}
