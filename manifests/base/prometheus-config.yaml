@@ -11,3 +11,12 @@ data:
       - job_name: 'fastapi'
         static_configs:
           - targets: ['fastapi-web-service:80']
+      - job_name: 'redis'
+        static_configs:
+          - targets: ['redis:6379']
+      - job_name: 'postgres'
+        static_configs:
+          - targets: ['postgres-db:5432']
+      - job_name: 'kafka'
+        static_configs:
+          - targets: ['kafka:9092']

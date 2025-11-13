@@ -21,6 +21,8 @@ spec:
           value: "admin@webstack.local"
         - name: PGADMIN_DEFAULT_PASSWORD
           value: "adminpassword"
+        ports:
+        - containerPort: 80
 ---
 apiVersion: v1
 kind: Service

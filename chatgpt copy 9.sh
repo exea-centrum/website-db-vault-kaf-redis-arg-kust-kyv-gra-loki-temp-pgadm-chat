@@ -826,310 +826,189 @@ YAML
 }
 
 generate_k8s_manifests(){
- info "Generating ALL Kubernetes manifests..."
+ info "Generating Kubernetes manifests..."
+ mkdir_p "$BASE_DIR"
 
- # app-deployment
+ # app deployment + service + sa
  cat > "${BASE_DIR}/app-deployment.yaml" <<YAML
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: fastapi-web-app
-  namespace: ${NAMESPACE}
-  labels:
-    app: ${PROJECT}
-    component: fastapi
+ name: fastapi-web-app
+ namespace: ${NAMESPACE}
+ labels:
+   app: ${PROJECT}
+   component: fastapi
 spec:
-  replicas: 2
-  selector:
-    matchLabels:
-      app: ${PROJECT}
-      component: fastapi
-  template:
-    metadata:
-      labels:
-        app: ${PROJECT}
-        component: fastapi
-    spec:
-      serviceAccountName: fastapi-sa
-      containers:
-      - name: app
-        image: ${REGISTRY}:latest
-        ports:
-        - containerPort: 8000
-        env:
-        - name: REDIS_HOST
-          value: "redis"
-        - name: REDIS_PORT
-          value: "6379"
-        - name: REDIS_LIST
-          value: "outgoing_messages"
-        - name: KAFKA_BOOTSTRAP_SERVERS
-          value: "kafka.${NAMESPACE}.svc.cluster.local:9092"
-        - name: KAFKA_TOPIC
-          value: "survey-topic"
-        - name: DATABASE_URL
-          value: "dbname=webdb user=webuser password=testpassword host=postgres-db"
-        resources:
-          requests:
-            cpu: "200m"
-            memory: "256Mi"
-          limits:
-            cpu: "500m"
-            memory: "512Mi"
-        livenessProbe:
-          httpGet:
-            path: /health
-            port: 8000
-          initialDelaySeconds: 20
-          periodSeconds: 10
-        readinessProbe:
-          httpGet:
-            path: /health
-            port: 8000
-          initialDelaySeconds: 5
-          periodSeconds: 5
+ replicas: 2
+ selector:
+   matchLabels:
+     app: ${PROJECT}
+     component: fastapi
+ template:
+   metadata:
+     labels:
+       app: ${PROJECT}
+       component: fastapi
+   spec:
+     serviceAccountName: fastapi-sa
+     containers:
+     - name: app
+       image: ${REGISTRY}:latest
+       ports:
+       - containerPort: 8000
+       env:
+       - name: REDIS_HOST
+         value: "redis"
+       - name: REDIS_PORT
+         value: "6379"
+       - name: REDIS_LIST
+         value: "outgoing_messages"
+       - name: KAFKA_BOOTSTRAP_SERVERS
+         value: "kafka.${NAMESPACE}.svc.cluster.local:9092"
+       - name: KAFKA_TOPIC
+         value: "survey-topic"
+       - name: DATABASE_URL
+         value: "dbname=webdb user=webuser password=testpassword host=postgres-db"
+       resources:
+         requests:
+           cpu: "200m"
+           memory: "256Mi"
+         limits:
+           cpu: "500m"
+           memory: "512Mi"
+       livenessProbe:
+         httpGet:
+           path: /health
+           port: 8000
+         initialDelaySeconds: 20
+         periodSeconds: 10
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: fastapi-web-service
-  namespace: ${NAMESPACE}
+ name: fastapi-web-service
+ namespace: ${NAMESPACE}
 spec:
-  type: ClusterIP
-  ports:
-  - port: 80
-    targetPort: 8000
-  selector:
-    app: ${PROJECT}
-    component: fastapi
+ type: ClusterIP
+ ports:
+ - port: 80
+   targetPort: 8000
+ selector:
+   app: ${PROJECT}
+   component: fastapi
 ---
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: fastapi-sa
-  namespace: ${NAMESPACE}
+ name: fastapi-sa
+ namespace: ${NAMESPACE}
 YAML
 
- # message-processor (worker)
+ # message-processor
  cat > "${BASE_DIR}/message-processor.yaml" <<YAML
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: message-processor
-  namespace: ${NAMESPACE}
-  labels:
-    app: ${PROJECT}
-    component: worker
+ name: message-processor
+ namespace: ${NAMESPACE}
+ labels:
+   app: ${PROJECT}
+   component: worker
 spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: ${PROJECT}
-      component: worker
-  template:
-    metadata:
-      labels:
-        app: ${PROJECT}
-        component: worker
-    spec:
-      serviceAccountName: fastapi-sa
-      containers:
-      - name: worker
-        image: ${REGISTRY}:latest
-        command: ["python", "worker.py"]
-        env:
-        - name: REDIS_HOST
-          value: "redis"
-        - name: REDIS_PORT
-          value: "6379"
-        - name: REDIS_LIST
-          value: "outgoing_messages"
-        - name: KAFKA_BOOTSTRAP_SERVERS
-          value: "kafka.${NAMESPACE}.svc.cluster.local:9092"
-        - name: KAFKA_TOPIC
-          value: "survey-topic"
-        - name: DATABASE_URL
-          value: "dbname=webdb user=webuser password=testpassword host=postgres-db"
-        resources:
-          requests:
-            cpu: "200m"
-            memory: "256Mi"
-          limits:
-            cpu: "500m"
-            memory: "512Mi"
+ replicas: 1
+ selector:
+   matchLabels:
+     app: ${PROJECT}
+     component: worker
+ template:
+   metadata:
+     labels:
+       app: ${PROJECT}
+       component: worker
+   spec:
+     serviceAccountName: fastapi-sa
+     containers:
+     - name: worker
+       image: ${REGISTRY}:latest
+       command: ["python", "worker.py"]
+       env:
+       - name: REDIS_HOST
+         value: "redis"
+       - name: REDIS_PORT
+         value: "6379"
+       - name: REDIS_LIST
+         value: "outgoing_messages"
+       - name: KAFKA_BOOTSTRAP_SERVERS
+         value: "kafka.${NAMESPACE}.svc.cluster.local:9092"
+       - name: KAFKA_TOPIC
+         value: "survey-topic"
+       - name: DATABASE_URL
+         value: "dbname=webdb user=webuser password=testpassword host=postgres-db"
+       resources:
+         requests:
+           cpu: "200m"
+           memory: "256Mi"
+         limits:
+           cpu: "500m"
+           memory: "512Mi"
 YAML
 
- # postgres-db
+ # postgres
  cat > "${BASE_DIR}/postgres-db.yaml" <<YAML
 apiVersion: v1
 kind: Service
 metadata:
-  name: postgres-db
-  namespace: ${NAMESPACE}
+ name: postgres-db
+ namespace: ${NAMESPACE}
 spec:
-  ports:
-  - port: 5432
-    name: postgres
-  selector:
-    app: ${PROJECT}
-    component: postgres
-  clusterIP: None
+ ports:
+ - port: 5432
+   name: postgres
+ selector:
+   app: ${PROJECT}
+   component: postgres
+ clusterIP: None
 ---
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  name: postgres-db
-  namespace: ${NAMESPACE}
+ name: postgres-db
+ namespace: ${NAMESPACE}
 spec:
-  serviceName: postgres-db
-  replicas: 1
-  selector:
-    matchLabels:
-      app: ${PROJECT}
-      component: postgres
-  template:
-    metadata:
-      labels:
-        app: ${PROJECT}
-        component: postgres
-    spec:
-      containers:
-      - name: postgres
-        image: postgres:15-alpine
-        env:
-        - name: POSTGRES_USER
-          value: "webuser"
-        - name: POSTGRES_PASSWORD
-          value: "testpassword"
-        - name: POSTGRES_DB
-          value: "webdb"
-        volumeMounts:
-        - name: postgres-data
-          mountPath: /var/lib/postgresql/data
-  volumeClaimTemplates:
-  - metadata:
-      name: postgres-data
-    spec:
-      accessModes: ["ReadWriteOnce"]
-      resources:
-        requests:
-          storage: 10Gi
-YAML
-
- # pgadmin
- cat > "${BASE_DIR}/pgadmin.yaml" <<YAML
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: pgadmin
-  namespace: ${NAMESPACE}
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: pgadmin
-  template:
-    metadata:
-      labels:
-        app: pgadmin
-    spec:
-      containers:
-      - name: pgadmin
-        image: dpage/pgadmin4:latest
-        env:
-        - name: PGADMIN_DEFAULT_EMAIL
-          value: "admin@webstack.local"
-        - name: PGADMIN_DEFAULT_PASSWORD
-          value: "adminpassword"
-        ports:
-        - containerPort: 80
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: pgadmin-service
-  namespace: ${NAMESPACE}
-spec:
-  type: ClusterIP
-  ports:
-  - port: 80
-    targetPort: 80
-  selector:
-    app: pgadmin
-YAML
-
- # vault
- cat > "${BASE_DIR}/vault.yaml" <<YAML
-apiVersion: v1
-kind: Service
-metadata:
-  name: vault
-  namespace: ${NAMESPACE}
-spec:
-  clusterIP: None
-  ports:
-  - name: http
-    port: 8200
-  selector:
-    app: vault
-    component: vault
----
-apiVersion: apps/v1
-kind: StatefulSet
-metadata:
-  name: vault
-  namespace: ${NAMESPACE}
-spec:
-  serviceName: vault
-  replicas: 1
-  selector:
-    matchLabels:
-      app: vault
-      component: vault
-  template:
-    metadata:
-      labels:
-        app: vault
-        component: vault
-    spec:
-      serviceAccountName: vault-sa
-      containers:
-      - name: vault
-        image: hashicorp/vault:1.15.0
-        ports:
-        - containerPort: 8200
-        env:
-        - name: VAULT_LOCAL_CONFIG
-          value: |
-            listener "tcp" {
-              address = "0.0.0.0:8200"
-              tls_disable = "true"
-            }
-            storage "file" {
-              path = "/vault/file"
-            }
-            disable_mlock = true
-            ui = true
-        securityContext:
-          capabilities:
-            add: ["IPC_LOCK"]
-        volumeMounts:
-        - name: vault-data
-          mountPath: /vault/file
-  volumeClaimTemplates:
-  - metadata:
-      name: vault-data
-    spec:
-      accessModes: ["ReadWriteOnce"]
-      resources:
-        requests:
-          storage: 1Gi
----
-apiVersion: v1
-kind: ServiceAccount
-metadata:
-  name: vault-sa
-  namespace: ${NAMESPACE}
+ serviceName: postgres-db
+ replicas: 1
+ selector:
+   matchLabels:
+     app: ${PROJECT}
+     component: postgres
+ template:
+   metadata:
+     labels:
+       app: ${PROJECT}
+       component: postgres
+   spec:
+     containers:
+     - name: postgres
+       image: postgres:15-alpine
+       env:
+       - name: POSTGRES_USER
+         value: "webuser"
+       - name: POSTGRES_PASSWORD
+         value: "testpassword"
+       - name: POSTGRES_DB
+         value: "webdb"
+       volumeMounts:
+       - name: postgres-data
+         mountPath: /var/lib/postgresql/data
+ volumeClaimTemplates:
+ - metadata:
+     name: postgres-data
+   spec:
+     accessModes: ["ReadWriteOnce"]
+     resources:
+       requests:
+         storage: 10Gi
 YAML
 
  # redis
@@ -1137,36 +1016,36 @@ YAML
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: redis
-  namespace: ${NAMESPACE}
+ name: redis
+ namespace: ${NAMESPACE}
 spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: redis
-  template:
-    metadata:
-      labels:
-        app: redis
-    spec:
-      containers:
-      - name: redis
-        image: redis:7-alpine
-        command: ["redis-server","--appendonly","yes"]
-        ports:
-        - containerPort: 6379
+ replicas: 1
+ selector:
+   matchLabels:
+     app: redis
+ template:
+   metadata:
+     labels:
+       app: redis
+   spec:
+     containers:
+     - name: redis
+       image: redis:7-alpine
+       command: ["redis-server","--appendonly","yes"]
+       ports:
+       - containerPort: 6379
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: redis
-  namespace: ${NAMESPACE}
+ name: redis
+ namespace: ${NAMESPACE}
 spec:
-  ports:
-  - port: 6379
-    targetPort: 6379
-  selector:
-    app: redis
+ ports:
+ - port: 6379
+   targetPort: 6379
+ selector:
+   app: redis
 YAML
 
  # kafka-kraft
@@ -1174,424 +1053,180 @@ YAML
 apiVersion: v1
 kind: Service
 metadata:
-  name: kafka
-  namespace: ${NAMESPACE}
+ name: kafka
+ namespace: ${NAMESPACE}
 spec:
-  clusterIP: None
-  ports:
-  - port: 9092
-    name: client
-  - port: 9093
-    name: inter
-  selector:
-    app: kafka
-    component: kafka
+ clusterIP: None
+ ports:
+ - port: 9092
+   name: client
+ - port: 9093
+   name: inter
+ selector:
+   app: kafka
+   component: kafka
 ---
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  name: kafka
-  namespace: ${NAMESPACE}
+ name: kafka
+ namespace: ${NAMESPACE}
 spec:
-  serviceName: kafka
-  replicas: 1
-  selector:
-    matchLabels:
-      app: kafka
-      component: kafka
-  template:
-    metadata:
-      labels:
-        app: kafka
-        component: kafka
-    spec:
-      containers:
-      - name: kafka
-        image: bitnami/kafka:3.6.1
-        env:
-        - name: KAFKA_CFG_NODE_ID
-          value: "1"
-        - name: KAFKA_CFG_PROCESS_ROLES
-          value: "controller,broker"
-        - name: KAFKA_CFG_CONTROLLER_QUORUM_VOTERS
-          value: "1@kafka:9093"
-        - name: KAFKA_CFG_LISTENERS
-          value: "CLIENT://:9092,INTERNAL://:9093"
-        - name: KAFKA_CFG_ADVERTISED_LISTENERS
-          value: "CLIENT://kafka:9092,INTERNAL://kafka:9093"
-        - name: KAFKA_CFG_KRAFT_CLUSTER_ID
-          value: "${KAFKA_CLUSTER_ID}"
-        ports:
-        - containerPort: 9092
+ serviceName: kafka
+ replicas: 1
+ selector:
+   matchLabels:
+     app: kafka
+     component: kafka
+ template:
+   metadata:
+     labels:
+       app: kafka
+       component: kafka
+   spec:
+     containers:
+     - name: kafka
+       image: bitnami/kafka:3.6.1
+       env:
+       - name: KAFKA_CFG_NODE_ID
+         value: "1"
+       - name: KAFKA_CFG_PROCESS_ROLES
+         value: "controller,broker"
+       - name: KAFKA_CFG_CONTROLLER_QUORUM_VOTERS
+         value: "1@kafka:9093"
+       - name: KAFKA_CFG_LISTENERS
+         value: "CLIENT://:9092,INTERNAL://:9093"
+       - name: KAFKA_CFG_ADVERTISED_LISTENERS
+         value: "CLIENT://kafka:9092,INTERNAL://kafka:9093"
+       - name: KAFKA_CFG_KRAFT_CLUSTER_ID
+         value: "${KAFKA_CLUSTER_ID}"
+       ports:
+       - containerPort: 9092
 YAML
 
- # kafka-ui
- cat > "${BASE_DIR}/kafka-ui.yaml" <<YAML
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: kafka-ui
-  namespace: ${NAMESPACE}
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: kafka-ui
-  template:
-    metadata:
-      labels:
-        app: kafka-ui
-    spec:
-      containers:
-      - name: kafka-ui
-        image: provectuslabs/kafka-ui:latest
-        ports:
-        - containerPort: 8080
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: kafka-ui
-  namespace: ${NAMESPACE}
-spec:
-  ports:
-  - port: 8080
-    targetPort: 8080
-  selector:
-    app: kafka-ui
-YAML
-
- # prometheus-config
+ # monitoring manifests (Prometheus, Grafana, Loki, Tempo)
  cat > "${BASE_DIR}/prometheus-config.yaml" <<YAML
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: prometheus-config
-  namespace: ${NAMESPACE}
+ name: prometheus-config
+ namespace: ${NAMESPACE}
 data:
-  prometheus.yml: |
-    global:
-      scrape_interval: 15s
-    scrape_configs:
-      - job_name: 'fastapi'
-        static_configs:
-          - targets: ['fastapi-web-service:80']
-      - job_name: 'redis'
-        static_configs:
-          - targets: ['redis:6379']
-      - job_name: 'postgres'
-        static_configs:
-          - targets: ['postgres-db:5432']
-      - job_name: 'kafka'
-        static_configs:
-          - targets: ['kafka:9092']
+ prometheus.yml: |
+   global:
+     scrape_interval: 15s
+   scrape_configs:
+     - job_name: 'fastapi'
+       static_configs:
+         - targets: ['fastapi-web-service:80']
+     - job_name: 'redis'
+       static_configs:
+         - targets: ['redis:6379']
+     - job_name: 'postgres'
+       static_configs:
+         - targets: ['postgres-db:5432']
 YAML
 
- # prometheus
  cat > "${BASE_DIR}/prometheus.yaml" <<YAML
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: prometheus
-  namespace: ${NAMESPACE}
+ name: prometheus
+ namespace: ${NAMESPACE}
 spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: prometheus
-  template:
-    metadata:
-      labels:
-        app: prometheus
-    spec:
-      containers:
-      - name: prometheus
-        image: prom/prometheus:v2.48.0
-        ports:
-        - containerPort: 9090
-        volumeMounts:
-        - name: config
-          mountPath: /etc/prometheus
-      volumes:
-      - name: config
-        configMap:
-          name: prometheus-config
+ replicas: 1
+ selector:
+   matchLabels:
+     app: prometheus
+ template:
+   metadata:
+     labels:
+       app: prometheus
+   spec:
+     containers:
+     - name: prometheus
+       image: prom/prometheus:v2.48.0
+       ports:
+       - containerPort: 9090
+       volumeMounts:
+       - name: config
+         mountPath: /etc/prometheus
+     volumes:
+     - name: config
+       configMap:
+         name: prometheus-config
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: prometheus-service
-  namespace: ${NAMESPACE}
+ name: prometheus-service
+ namespace: ${NAMESPACE}
 spec:
-  ports:
-  - port: 9090
-    targetPort: 9090
-  selector:
-    app: prometheus
+ ports:
+ - port: 9090
+   targetPort: 9090
+ selector:
+   app: prometheus
 YAML
 
- # grafana-datasource
  cat > "${BASE_DIR}/grafana-datasource.yaml" <<YAML
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: grafana-datasource
-  namespace: ${NAMESPACE}
+ name: grafana-datasource
+ namespace: ${NAMESPACE}
 data:
-  prometheus.yaml: |
-    apiVersion: 1
-    datasources:
-    - name: Prometheus
-      type: prometheus
-      url: http://prometheus-service:9090
-      isDefault: true
+ prometheus.yaml: |
+   apiVersion: 1
+   datasources:
+   - name: Prometheus
+     type: prometheus
+     url: http://prometheus-service:9090
+     isDefault: true
 YAML
 
- # grafana
  cat > "${BASE_DIR}/grafana.yaml" <<YAML
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: grafana
-  namespace: ${NAMESPACE}
+ name: grafana
+ namespace: ${NAMESPACE}
 spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: grafana
-  template:
-    metadata:
-      labels:
-        app: grafana
-    spec:
-      containers:
-      - name: grafana
-        image: grafana/grafana:10.2.2
-        env:
-        - name: GF_SECURITY_ADMIN_USER
-          value: admin
-        - name: GF_SECURITY_ADMIN_PASSWORD
-          value: admin
-        ports:
-        - containerPort: 3000
+ replicas: 1
+ selector:
+   matchLabels:
+     app: grafana
+ template:
+   metadata:
+     labels:
+       app: grafana
+   spec:
+     containers:
+     - name: grafana
+       image: grafana/grafana:10.2.2
+       env:
+       - name: GF_SECURITY_ADMIN_USER
+         value: admin
+       - name: GF_SECURITY_ADMIN_PASSWORD
+         value: admin
+       ports:
+       - containerPort: 3000
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: grafana-service
-  namespace: ${NAMESPACE}
+ name: grafana-service
+ namespace: ${NAMESPACE}
 spec:
-  type: ClusterIP
-  ports:
-  - port: 80
-    targetPort: 3000
-  selector:
-    app: grafana
+ type: ClusterIP
+ ports:
+ - port: 80
+   targetPort: 3000
+ selector:
+   app: grafana
 YAML
 
- # loki-config
- cat > "${BASE_DIR}/loki-config.yaml" <<YAML
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: loki-config
-  namespace: ${NAMESPACE}
-data:
-  loki.yaml: |
-    server:
-      http_listen_port: 3100
-YAML
-
- # loki
- cat > "${BASE_DIR}/loki.yaml" <<YAML
-apiVersion: apps/v1
-kind: StatefulSet
-metadata:
-  name: loki
-  namespace: ${NAMESPACE}
-spec:
-  serviceName: loki
-  replicas: 1
-  selector:
-    matchLabels:
-      app: loki
-  template:
-    metadata:
-      labels:
-        app: loki
-    spec:
-      containers:
-      - name: loki
-        image: grafana/loki:2.9.2
-        ports:
-        - containerPort: 3100
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: loki
-  namespace: ${NAMESPACE}
-spec:
-  ports:
-  - port: 3100
-    targetPort: 3100
-  selector:
-    app: loki
-YAML
-
- # promtail-config
- cat > "${BASE_DIR}/promtail-config.yaml" <<YAML
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: promtail-config
-  namespace: ${NAMESPACE}
-data:
-  promtail.yaml: |
-    server:
-      http_listen_port: 9080
-    clients:
-      - url: http://loki:3100/loki/api/v1/push
-YAML
-
- # promtail
- cat > "${BASE_DIR}/promtail.yaml" <<YAML
-apiVersion: apps/v1
-kind: DaemonSet
-metadata:
-  name: promtail
-  namespace: ${NAMESPACE}
-spec:
-  selector:
-    matchLabels:
-      app: promtail
-  template:
-    metadata:
-      labels:
-        app: promtail
-    spec:
-      containers:
-      - name: promtail
-        image: grafana/promtail:2.9.2
-        volumeMounts:
-        - name: config
-          mountPath: /etc/promtail
-        - name: logs
-          mountPath: /var/log
-      volumes:
-      - name: config
-        configMap:
-          name: promtail-config
-      - name: logs
-        hostPath:
-          path: /var/log
-YAML
-
- # tempo-config
- cat > "${BASE_DIR}/tempo-config.yaml" <<YAML
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: tempo-config
-  namespace: ${NAMESPACE}
-data:
-  tempo.yaml: |
-    server:
-      http_listen_port: 3200
-YAML
-
- # tempo
- cat > "${BASE_DIR}/tempo.yaml" <<YAML
-apiVersion: apps/v1
-kind: StatefulSet
-metadata:
-  name: tempo
-  namespace: ${NAMESPACE}
-spec:
-  serviceName: tempo
-  replicas: 1
-  selector:
-    matchLabels:
-      app: tempo
-  template:
-    metadata:
-      labels:
-        app: tempo
-    spec:
-      containers:
-      - name: tempo
-        image: grafana/tempo:2.4.2
-        ports:
-        - containerPort: 3200
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: tempo
-  namespace: ${NAMESPACE}
-spec:
-  ports:
-  - port: 3200
-    targetPort: 3200
-  selector:
-    app: tempo
-YAML
-
- # ingress
- cat > "${BASE_DIR}/ingress.yaml" <<YAML
-apiVersion: networking.k8s.io/v1
-kind: Ingress
-metadata:
-  name: ${PROJECT}-ingress
-  namespace: ${NAMESPACE}
-  annotations:
-    kubernetes.io/ingress.class: "nginx"
-spec:
-  rules:
-  - host: app.${PROJECT}.local
-    http:
-      paths:
-      - path: /
-        pathType: Prefix
-        backend:
-          service:
-            name: fastapi-web-service
-            port:
-              number: 80
-YAML
-
- # kyverno-policy
- cat > "${BASE_DIR}/kyverno-policy.yaml" <<YAML
-apiVersion: kyverno.io/v1
-kind: ClusterPolicy
-metadata:
-  name: require-resource-requests-limits
-spec:
-  validationFailureAction: Enforce
-  background: true
-  rules:
-  - name: check-container-resources
-    match:
-      resources:
-        kinds:
-        - Pod
-    validate:
-      message: "All containers must define 'requests' and 'limits' for CPU and memory."
-      foreach:
-      - variables:
-          element: "{{ request.object.spec.containers[] }}"
-        deny:
-          conditions:
-            any:
-            - key: "{{ element.resources.requests.cpu || '' }}"
-              operator: Equals
-              value: ""
-            - key: "{{ element.resources.limits.cpu || '' }}"
-              operator: Equals
-              value: ""
-YAML
-
- # kustomization with ALL resources
+ # kustomization
  cat > "${BASE_DIR}/kustomization.yaml" <<YAML
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
@@ -1601,109 +1236,58 @@ resources:
  - app-deployment.yaml
  - message-processor.yaml
  - postgres-db.yaml
- - pgadmin.yaml
- - vault.yaml
  - redis.yaml
  - kafka-kraft.yaml
- - kafka-ui.yaml
  - prometheus-config.yaml
  - prometheus.yaml
  - grafana-datasource.yaml
  - grafana.yaml
- - loki-config.yaml
- - loki.yaml
- - promtail-config.yaml
- - promtail.yaml
- - tempo-config.yaml
- - tempo.yaml
- - ingress.yaml
- - kyverno-policy.yaml
 
 commonLabels:
-  app.kubernetes.io/name: ${PROJECT}
-  app.kubernetes.io/instance: ${PROJECT}
-  app.kubernetes.io/managed-by: kustomize
+ app.kubernetes.io/name: ${PROJECT}
+ app.kubernetes.io/instance: ${PROJECT}
+ app.kubernetes.io/managed-by: kustomize
 YAML
 
- # argocd application
- cat > "${ROOT_DIR}/argocd-application.yaml" <<YAML
-apiVersion: argoproj.io/v1alpha1
-kind: Application
-metadata:
-  name: ${PROJECT}
-  namespace: argocd
-spec:
-  project: default
-  source:
-    repoURL: ${REPO_URL}
-    targetRevision: HEAD
-    path: manifests/base
-  destination:
-    server: https://kubernetes.default.svc
-    namespace: ${NAMESPACE}
-  syncPolicy:
-    automated:
-      prune: true
-      selfHeal: true
-YAML
-
- info "All Kubernetes manifests written to ${BASE_DIR}."
+ info "Kubernetes manifests written to ${BASE_DIR}."
 }
 
 generate_readme(){
  info "Generating README.md..."
  cat > "${ROOT_DIR}/README.md" <<README
-# ${PROJECT} - Complete Monitoring Stack
+# ${PROJECT} - Personal Website with Survey System
 
-## All Resources Generated:
-- ✅ app-deployment
-- ✅ postgres-db  
-- ✅ pgadmin
-- ✅ vault
-- ✅ redis
-- ✅ kafka-kraft
-- ✅ kafka-ui
-- ✅ prometheus-config
-- ✅ prometheus
-- ✅ grafana-datasource
-- ✅ grafana
-- ✅ loki-config
-- ✅ loki
-- ✅ promtail-config
-- ✅ promtail
-- ✅ tempo-config
-- ✅ tempo
-- ✅ ingress
-- ✅ kyverno-policy
+## Features
+- FastAPI backend with survey system
+- Redis message queue for async processing
+- Kafka for event streaming
+- PostgreSQL for data persistence
+- Full monitoring stack (Prometheus, Grafana)
+- Vault for secrets management
 
 ## Architecture
-1. **Frontend**: FastAPI with survey system
-2. **Queue**: Redis for message brokering
-3. **Stream Processing**: Kafka for event streaming  
-4. **Database**: PostgreSQL for persistence
-5. **Secrets**: Vault for secure configuration
-6. **Monitoring**: Prometheus + Grafana + Loki + Tempo
-7. **Policy**: Kyverno for security policies
+1. Frontend: HTML/CSS/JS with Tailwind
+2. Backend: FastAPI with Redis queue
+3. Worker: Processes messages from Redis, sends to Kafka and PostgreSQL
+4. Monitoring: Prometheus metrics, Grafana dashboards
 
 ## Quick Start
 \`\`\`bash
 ./unified-stack.sh generate
 docker build -t ${REGISTRY}:latest .
-docker push ${REGISTRY}:latest  
+docker push ${REGISTRY}:latest
 kubectl apply -k manifests/base
 \`\`\`
 
-## Access Points
-- App: http://app.${PROJECT}.local
-- Grafana: http://grafana-service.${NAMESPACE}.svc.cluster.local
-- Prometheus: http://prometheus-service.${NAMESPACE}.svc.cluster.local
-- Kafka UI: http://kafka-ui.${NAMESPACE}.svc.cluster.local:8080
-- pgAdmin: http://pgadmin-service.${NAMESPACE}.svc.cluster.local
+## Survey Flow
+1. User fills survey → FastAPI → Redis
+2. Worker consumes from Redis → Kafka + PostgreSQL
+3. Real-time stats displayed with Chart.js
 README
 }
 
 generate_all(){
- info "Starting complete generation..."
+ info "Starting generation..."
  generate_structure
  generate_fastapi_app
  generate_dockerfile
@@ -1711,18 +1295,11 @@ generate_all(){
  generate_k8s_manifests
  generate_readme
  echo
- info "✅ COMPLETE! All resources generated:"
- echo "📁 app/ - FastAPI application with survey system"
- echo "📁 manifests/base/ - ALL Kubernetes manifests"
- echo "📄 Dockerfile - Container definition" 
- echo "📄 .github/workflows/ci-cd.yaml - GitHub Actions"
- echo "📄 README.md - Complete documentation"
- echo
- echo "🚀 Next steps:"
- echo "1. Build: docker build -t ${REGISTRY}:latest ."
- echo "2. Push: docker push ${REGISTRY}:latest"
+ info "✅ Generation complete. Files created under: ${ROOT_DIR}"
+ echo "Next steps:"
+ echo "1. Build image: docker build -t ${REGISTRY}:latest ."
+ echo "2. Push to registry: docker push ${REGISTRY}:latest" 
  echo "3. Deploy: kubectl apply -k manifests/base"
- echo "4. Access: http://app.${PROJECT}.local"
 }
 
 case "${1:-}" in
@@ -1730,7 +1307,7 @@ case "${1:-}" in
  help|-h|--help)
    cat <<EOF
 Usage: $0 generate
-Generates complete website with ALL monitoring stack components.
+Generates complete website with survey system and monitoring.
 EOF
    ;;
  *)

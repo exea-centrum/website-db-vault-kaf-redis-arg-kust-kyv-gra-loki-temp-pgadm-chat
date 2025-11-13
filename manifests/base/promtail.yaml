@@ -15,3 +15,15 @@ spec:
       containers:
       - name: promtail
         image: grafana/promtail:2.9.2
+        volumeMounts:
+        - name: config
+          mountPath: /etc/promtail
+        - name: logs
+          mountPath: /var/log
+      volumes:
+      - name: config
+        configMap:
+          name: promtail-config
+      - name: logs
+        hostPath:
+          path: /var/log
