@@ -22,6 +22,8 @@ spec:
           image: grafana/tempo:2.4.2
           ports:
             - containerPort: 3200
+            - containerPort: 9095
+              name: grpc
           resources:
             limits:
               cpu: "250m"
@@ -29,21 +31,16 @@ spec:
             requests:
               cpu: "100m"
               memory: "256Mi"
-          env:
-            - name: TEMPO_STORAGE_TRACE_BACKEND
-              value: "local"
-            - name: TEMPO_STORAGE_TRACE_LOCAL_PATH
-              value: "/tmp/tempo/traces"
           volumeMounts:
             - name: tempo-storage
               mountPath: /tmp/tempo
+            - name: tempo-config
+              mountPath: /etc/tempo
           args:
             - -config.file=/etc/tempo/tempo.yaml
-            - -storage.trace.backend=local
-            - -storage.trace.local.path=/tmp/tempo/traces
-            - -compactor.compaction.window=1h
-            - -compactor.compaction.block-retention=24h
-            - -compactor.compaction.compacted-block-retention=1h
       volumes:
         - name: tempo-storage
           emptyDir: {}
+        - name: tempo-config
+          configMap:
+            name: tempo-config

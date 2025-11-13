@@ -7,3 +7,24 @@ data:
   tempo.yaml: |
     server:
       http_listen_port: 3200
+      grpc_listen_port: 9095
+
+    distributor:
+      receivers:
+        otlp:
+          protocols:
+            grpc:
+            http:
+
+    storage:
+      trace:
+        backend: local
+        local:
+          path: /tmp/tempo/traces
+
+    compactor:
+      compaction:
+        compaction_window: 1h
+        max_compaction_objects: 1000000
+        block_retention: 24h
+        compacted_block_retention: 1h
