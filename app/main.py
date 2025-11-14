@@ -39,14 +39,25 @@ def get_redis():
     return redis.Redis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=True)
 
 def get_kafka():
-    try:
-        return KafkaProducer(
-            bootstrap_servers=KAFKA_BOOTSTRAP.split(','),
-            value_serializer=lambda v: json.dumps(v).encode('utf-8')
-        )
-    except Exception as e:
-        logger.exception("Kafka init error: %s", e)
-        return None
+    max_retries = 10
+    for attempt in range(max_retries):
+        try:
+            producer = KafkaProducer(
+                bootstrap_servers=KAFKA_BOOTSTRAP.split(','),
+                value_serializer=lambda v: json.dumps(v).encode('utf-8'),
+                retries=3
+            )
+            # Test connection
+            producer.list_topics()
+            logger.info("Kafka connected successfully")
+            return producer
+        except Exception as e:
+            logger.warning(f"Kafka connection attempt {attempt + 1} failed: {e}")
+            if attempt < max_retries - 1:
+                time.sleep(10)
+            else:
+                logger.error(f"All Kafka connection attempts failed: {e}")
+                return None
 
 def get_vault_secret(secret_path: str) -> dict:
     try:

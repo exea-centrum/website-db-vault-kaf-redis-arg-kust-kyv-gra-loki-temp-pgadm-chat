@@ -69,25 +69,14 @@ def get_redis():
     return redis.Redis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=True)
 
 def get_kafka():
-    max_retries = 10
-    for attempt in range(max_retries):
-        try:
-            producer = KafkaProducer(
-                bootstrap_servers=KAFKA_BOOTSTRAP.split(','),
-                value_serializer=lambda v: json.dumps(v).encode('utf-8'),
-                retries=3
-            )
-            # Test connection
-            producer.list_topics()
-            logger.info("Kafka connected successfully")
-            return producer
-        except Exception as e:
-            logger.warning(f"Kafka connection attempt {attempt + 1} failed: {e}")
-            if attempt < max_retries - 1:
-                time.sleep(10)
-            else:
-                logger.error(f"All Kafka connection attempts failed: {e}")
-                return None
+    try:
+        return KafkaProducer(
+            bootstrap_servers=KAFKA_BOOTSTRAP.split(','),
+            value_serializer=lambda v: json.dumps(v).encode('utf-8')
+        )
+    except Exception as e:
+        logger.exception("Kafka init error: %s", e)
+        return None
 
 def get_vault_secret(secret_path: str) -> dict:
     try:
@@ -366,25 +355,14 @@ def get_redis():
     return redis.Redis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=True)
 
 def get_kafka():
-    max_retries = 10
-    for attempt in range(max_retries):
-        try:
-            producer = KafkaProducer(
-                bootstrap_servers=KAFKA_BOOTSTRAP.split(','),
-                value_serializer=lambda v: json.dumps(v).encode('utf-8'),
-                retries=3
-            )
-            # Test connection
-            producer.list_topics()
-            logger.info("Kafka connected successfully")
-            return producer
-        except Exception as e:
-            logger.warning(f"Kafka connection attempt {attempt + 1} failed: {e}")
-            if attempt < max_retries - 1:
-                time.sleep(10)
-            else:
-                logger.error(f"All Kafka connection attempts failed: {e}")
-                return None
+    try:
+        return KafkaProducer(
+            bootstrap_servers=KAFKA_BOOTSTRAP.split(','),
+            value_serializer=lambda v: json.dumps(v).encode('utf-8')
+        )
+    except Exception as e:
+        logger.exception("Kafka init error: %s", e)
+        return None
 
 def get_db_connection():
     max_retries = 30
@@ -393,11 +371,11 @@ def get_db_connection():
             conn = psycopg2.connect(DATABASE_URL)
             return conn
         except psycopg2.OperationalError as e:
-            logger.warning(f"Database connection attempt {attempt + 1} failed: {e}")
+            logger.warning(f"Attempt {attempt + 1} failed: {e}")
             if attempt < max_retries - 1:
                 time.sleep(10)
             else:
-                logger.error(f"All database connection attempts failed: {e}")
+                logger.error(f"All connection attempts failed: {e}")
                 raise e
 
 def save_to_db(item_type, data):
@@ -427,41 +405,27 @@ def save_to_db(item_type, data):
 
 def process_item(item, producer):
     try:
-        # Save to PostgreSQL first (more critical)
+        # Send to Kafka
+        if producer:
+            producer.send(KAFKA_TOPIC, value=item)
+            producer.flush()
+            logger.info(f"Sent to Kafka topic {KAFKA_TOPIC}: {item}")
+        
+        # Save to PostgreSQL
         item_type = item.get("type")
         save_to_db(item_type, item)
-        
-        # Then send to Kafka if available
-        if producer:
-            try:
-                future = producer.send(KAFKA_TOPIC, value=item)
-                # Wait for send to complete with timeout
-                future.get(timeout=10)
-                logger.info(f"Sent to Kafka topic {KAFKA_TOPIC}: {item}")
-            except Exception as e:
-                logger.warning(f"Failed to send to Kafka (will continue without Kafka): {e}")
         
     except Exception as e:
         logger.exception(f"Processing failed for item: {item}")
 
 def main():
     r = get_redis()
-    producer = None
-    kafka_retry_time = 60  # Retry Kafka connection every 60 seconds
-    
+    producer = get_kafka()
     logger.info("Worker started. Listening on Redis list '%s'", REDIS_LIST)
     
     while True:
         try:
-            # Try to connect to Kafka if not connected
-            if not producer:
-                producer = get_kafka()
-                if not producer:
-                    logger.info(f"Retrying Kafka connection in {kafka_retry_time} seconds")
-                    time.sleep(kafka_retry_time)
-                    continue
-            
-            res = r.blpop(REDIS_LIST, timeout=10)
+            res = r.blpop(REDIS_LIST, timeout=0)
             if res:
                 _, data = res
                 try:
@@ -470,16 +434,9 @@ def main():
                     item = {"raw": data, "type": "unknown"}
                 
                 process_item(item, producer)
-                
-        except Exception as e:
-            logger.exception("Worker loop exception, reconnecting...")
-            if producer:
-                try:
-                    producer.close()
-                except:
-                    pass
-                producer = None
-            time.sleep(5)
+        except Exception:
+            logger.exception("Worker loop exception")
+            time.sleep(2)
 
 if __name__ == "__main__":
     main()
@@ -1331,7 +1288,7 @@ spec:
     app: redis
 YAML
 
- # kafka-kraft - UPDATED with auto topic creation and without Strimzi dependency
+ # kafka-kraft - USING APACHE KAFKA 4.1 INSTEAD OF BITNAMI
  cat > "${BASE_DIR}/kafka-kraft.yaml" <<YAML
 apiVersion: v1
 kind: Service
@@ -1397,8 +1354,6 @@ spec:
           value: "168"
         - name: KAFKA_NUM_PARTITIONS
           value: "3"
-        - name: KAFKA_AUTO_CREATE_TOPICS_ENABLE
-          value: "true"
         - name: POD_NAME
           valueFrom:
             fieldRef:
@@ -1425,42 +1380,22 @@ spec:
           periodSeconds: 10
 YAML
 
- # kafka-topic-job.yaml - NEW for creating topics without Strimzi CRD
- cat > "${BASE_DIR}/kafka-topic-job.yaml" <<YAML
-apiVersion: batch/v1
-kind: Job
+ # kafka-topics.yaml - FIXED Kafka topic configuration
+ cat > "${BASE_DIR}/kafka-topics.yaml" <<YAML
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaTopic
 metadata:
-  name: create-kafka-topics
+  name: survey-topic
   namespace: ${NAMESPACE}
+  labels:
+    strimzi.io/cluster: kafka-cluster
 spec:
-  template:
-    spec:
-      containers:
-      - name: create-topics
-        image: apache/kafka:4.1
-        command:
-        - /bin/sh
-        - -c
-        - |
-          # Wait for Kafka to be ready
-          echo "Waiting for Kafka to be ready..."
-          until nc -z kafka 9092; do
-            echo "Waiting for Kafka..."
-            sleep 5
-          done
-          
-          # Create survey topic
-          /opt/kafka/bin/kafka-topics.sh --create \
-            --bootstrap-server kafka:9092 \
-            --topic survey-topic \
-            --partitions 3 \
-            --replication-factor 1 \
-            --config retention.ms=604800000 \
-            --if-not-exists
-          
-          echo "Kafka topics created successfully"
-      restartPolicy: OnFailure
-  backoffLimit: 3
+  partitions: 3
+  replicas: 1
+  config:
+    retention.ms: 604800000
+    segment.bytes: 1073741824
+    cleanup.policy: delete
 YAML
 
  # kafka-ui
@@ -2741,7 +2676,7 @@ spec:
                 cpu: "?*"
 YAML
 
- # kustomization with ALL resources - UPDATED (removed kafka-topics.yaml, added kafka-topic-job.yaml)
+ # kustomization with ALL resources - UPDATED
  cat > "${BASE_DIR}/kustomization.yaml" <<YAML
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
@@ -2757,7 +2692,7 @@ resources:
  - vault-job.yaml
  - redis.yaml
  - kafka-kraft.yaml
- - kafka-topic-job.yaml
+ - kafka-topics.yaml
  - kafka-ui.yaml
  - fastapi-config.yaml
  - prometheus-config.yaml

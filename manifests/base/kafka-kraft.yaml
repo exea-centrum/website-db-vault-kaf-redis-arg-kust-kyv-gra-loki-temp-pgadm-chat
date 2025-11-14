@@ -62,6 +62,8 @@ spec:
           value: "168"
         - name: KAFKA_NUM_PARTITIONS
           value: "3"
+        - name: KAFKA_AUTO_CREATE_TOPICS_ENABLE
+          value: "true"
         - name: POD_NAME
           valueFrom:
             fieldRef:
