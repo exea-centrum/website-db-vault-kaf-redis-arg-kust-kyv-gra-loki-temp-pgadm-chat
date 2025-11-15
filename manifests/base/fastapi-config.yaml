@@ -8,32 +8,33 @@ data:
     app:
       name: "Dawid Trojanowski - Personal Website"
       version: "1.0.0"
-      debug: false
-    
+      debug: true
+
     database:
       host: "postgres-db"
       port: 5432
       name: "webdb"
       user: "webuser"
-    
+      password: "testpassword"
+
     redis:
       host: "redis"
       port: 6379
       list_name: "outgoing_messages"
-    
+
     kafka:
-      bootstrap_servers: "kafka:9092"
+      bootstrap_servers: "kafka-0.kafka.davtrowebdbvault.svc.cluster.local:9092"
       topic: "survey-topic"
-    
+
     vault:
       url: "http://vault:8200"
       token: "root"
       secret_path: "secret/data/database/postgres"
-    
+
     monitoring:
       enabled: true
       metrics_port: 8000
-    
+
     features:
       survey_enabled: true
       contact_form_enabled: true
