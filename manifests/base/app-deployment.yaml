@@ -26,7 +26,7 @@ spec:
             [
               "sh",
               "-c",
-              "until nslookup postgres-db.davtrowebdbvault.svc.cluster.local; do echo waiting for postgres-db; sleep 2; done; until nc -z postgres-db.davtrowebdbvault.svc.cluster.local 5432; do echo waiting for postgres port 5432; sleep 2; done",
+              "until nc -z postgres-db 5432; do echo waiting for postgres; sleep 2; done; echo postgres ready",
             ]
         - name: wait-for-vault
           image: busybox:1.35
@@ -34,7 +34,7 @@ spec:
             [
               "sh",
               "-c",
-              "until nslookup vault.davtrowebdbvault.svc.cluster.local; do echo waiting for vault; sleep 2; done; until nc -z vault.davtrowebdbvault.svc.cluster.local 8200; do echo waiting for vault port 8200; sleep 2; done",
+              "until nc -z vault 8200; do echo waiting for vault; sleep 2; done; echo vault ready",
             ]
         - name: wait-for-redis
           image: busybox:1.35
@@ -42,7 +42,7 @@ spec:
             [
               "sh",
               "-c",
-              "until nslookup redis.davtrowebdbvault.svc.cluster.local; do echo waiting for redis; sleep 2; done; until nc -z redis.davtrowebdbvault.svc.cluster.local 6379; do echo waiting for redis port 6379; sleep 2; done",
+              "until nc -z redis 6379; do echo waiting for redis; sleep 2; done; echo redis ready",
             ]
         - name: wait-for-kafka
           image: busybox:1.35
@@ -50,7 +50,7 @@ spec:
             [
               "sh",
               "-c",
-              "until nslookup kafka-0.kafka.davtrowebdbvault.svc.cluster.local; do echo waiting for kafka; sleep 2; done; until nc -z kafka-0.kafka.davtrowebdbvault.svc.cluster.local 9092; do echo waiting for kafka port 9092; sleep 2; done",
+              "until nc -z kafka 9092; do echo waiting for kafka; sleep 2; done; echo kafka ready",
             ]
       containers:
         - name: app
@@ -65,7 +65,7 @@ spec:
             - name: REDIS_LIST
               value: "outgoing_messages"
             - name: KAFKA_BOOTSTRAP_SERVERS
-              value: "kafka-0.kafka.davtrowebdbvault.svc.cluster.local:9092"
+              value: "kafka:9092" # Zmienione na krótką nazwę
             - name: KAFKA_TOPIC
               value: "survey-topic"
             - name: VAULT_ADDR
