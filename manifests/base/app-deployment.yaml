@@ -3,11 +3,8 @@ kind: Deployment
 metadata:
   name: fastapi-web-app
   namespace: davtrowebdbvault
-  labels:
-    app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
-    component: fastapi
 spec:
-  replicas: 1 # Tymczasowo 1 replika
+  replicas: 2
   selector:
     matchLabels:
       app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
@@ -26,17 +23,13 @@ spec:
             [
               "sh",
               "-c",
-              'echo "Waiting for services to be ready..."; sleep 30; echo "Proceeding with startup"',
+              'echo "Waiting for services..."; sleep 45; echo "Services ready"',
             ]
-          resources:
-            requests:
-              cpu: "10m"
-              memory: "16Mi"
       containers:
         - name: app
           image: ghcr.io/exea-centrum/website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui:latest
           ports:
-            - containerPort: 8006
+            - containerPort: 8000
           env:
             - name: REDIS_HOST
               value: "redis"
@@ -45,7 +38,7 @@ spec:
             - name: REDIS_LIST
               value: "outgoing_messages"
             - name: KAFKA_BOOTSTRAP_SERVERS
-              value: "kafka:9092" # Zmienione na krótką nazwę
+              value: "kafka:9092"
             - name: KAFKA_TOPIC
               value: "survey-topic"
             - name: VAULT_ADDR
@@ -58,52 +51,33 @@ spec:
               value: "1"
           resources:
             requests:
-              cpu: "200m"
-              memory: "256Mi"
+              cpu: "100m"
+              memory: "128Mi"
             limits:
-              cpu: "500m"
-              memory: "512Mi"
+              cpu: "250m"
+              memory: "256Mi"
+          # ZWIĘKSZONE TIMEOUTY DLA PROBE'ÓW
           livenessProbe:
             httpGet:
               path: /health
-              port: 8006
-            initialDelaySeconds: 60
-            periodSeconds: 15
+              port: 8000
+            initialDelaySeconds: 180 # Zwiększone do 3 minut
+            periodSeconds: 30
             failureThreshold: 3
-            timeoutSeconds: 5
+            timeoutSeconds: 10
           readinessProbe:
             httpGet:
               path: /health
-              port: 8006
-            initialDelaySeconds: 30
-            periodSeconds: 10
+              port: 8000
+            initialDelaySeconds: 120 # Zwiększone do 2 minut
+            periodSeconds: 20
             failureThreshold: 3
-            timeoutSeconds: 5
+            timeoutSeconds: 10
           startupProbe:
             httpGet:
               path: /health
-              port: 8006
-            initialDelaySeconds: 10
-            periodSeconds: 10
-            failureThreshold: 30
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: fastapi-web-service
-  namespace: davtrowebdbvault
-spec:
-  type: ClusterIP
-  ports:
-    - port: 80
-      targetPort: 8000
-      protocol: TCP
-  selector:
-    app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
-    component: fastapi
----
-apiVersion: v1
-kind: ServiceAccount
-metadata:
-  name: fastapi-sa
-  namespace: davtrowebdbvault
+              port: 8000
+            initialDelaySeconds: 60 # Zwiększone do 1 minuty
+            periodSeconds: 20
+            failureThreshold: 15 # Więcej prób
+            timeoutSeconds: 10
