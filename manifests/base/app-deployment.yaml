@@ -61,7 +61,7 @@ spec:
             httpGet:
               path: /health
               port: 8000
-            initialDelaySeconds: 180 # Zwiększone do 3 minut
+            initialDelaySeconds: 300 # Zwiększone do 3 minut
             periodSeconds: 30
             failureThreshold: 3
             timeoutSeconds: 10
@@ -77,7 +77,7 @@ spec:
             httpGet:
               path: /health
               port: 8000
-            initialDelaySeconds: 60 # Zwiększone do 1 minuty
+            initialDelaySeconds: 120 # Zwiększone do 1 minuty
             periodSeconds: 20
             failureThreshold: 15 # Więcej prób
             timeoutSeconds: 10
