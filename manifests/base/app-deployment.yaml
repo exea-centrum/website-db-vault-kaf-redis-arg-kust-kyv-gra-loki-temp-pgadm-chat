@@ -3,6 +3,9 @@ kind: Deployment
 metadata:
   name: fastapi-web-app
   namespace: davtrowebdbvault
+  labels:
+    app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
+    component: fastapi
 spec:
   replicas: 2
   selector:
@@ -17,13 +20,41 @@ spec:
     spec:
       serviceAccountName: fastapi-sa
       initContainers:
-        - name: wait-for-services
+        - name: wait-for-postgres
           image: busybox:1.35
           command:
             [
               "sh",
               "-c",
-              'echo "Waiting for services..."; sleep 45; echo "Services ready"',
+              'until nc -z postgres-db 5432; do echo "waiting for postgres..."; sleep 10; done; echo "postgres ready"',
+              'echo "Waiting for postgres..."; sleep 30; until nc -z postgres-db 5432; do echo "waiting for postgres..."; sleep 10; done; echo "postgres ready"',
+            ]
+        - name: wait-for-vault
+          image: busybox:1.35
+          command:
+            [
+              "sh",
+              "-c",
+              'until nc -z vault 8200; do echo "waiting for vault..."; sleep 10; done; echo "vault ready"',
+              'echo "Waiting for vault..."; until nc -z vault 8200; do echo "waiting for vault..."; sleep 10; done; echo "vault ready"',
+            ]
+        - name: wait-for-redis
+          image: busybox:1.35
+          command:
+            [
+              "sh",
+              "-c",
+              'until nc -z redis 6379; do echo "waiting for redis..."; sleep 10; done; echo "redis ready"',
+              'echo "Waiting for redis..."; until nc -z redis 6379; do echo "waiting for redis..."; sleep 10; done; echo "redis ready"',
+            ]
+        - name: wait-for-kafka
+          image: busybox:1.35
+          command:
+            [
+              "sh",
+              "-c",
+              'until nc -z kafka 9092; do echo "waiting for kafka..."; sleep 10; done; echo "kafka ready"',
+              'echo "Waiting for kafka..."; until nc -z kafka 9092; do echo "waiting for kafka..."; sleep 10; done; echo "kafka ready"',
             ]
       containers:
         - name: app
@@ -38,7 +69,7 @@ spec:
             - name: REDIS_LIST
               value: "outgoing_messages"
             - name: KAFKA_BOOTSTRAP_SERVERS
-              value: "kafka:9092"
+              value: "kafka:9092" # Zmienione na krótką nazwę
             - name: KAFKA_TOPIC
               value: "survey-topic"
             - name: VAULT_ADDR
@@ -51,33 +82,52 @@ spec:
               value: "1"
           resources:
             requests:
-              cpu: "100m"
-              memory: "128Mi"
-            limits:
-              cpu: "250m"
+              cpu: "200m"
               memory: "256Mi"
-          # ZWIĘKSZONE TIMEOUTY DLA PROBE'ÓW
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
           livenessProbe:
             httpGet:
               path: /health
               port: 8000
-            initialDelaySeconds: 300 # Zwiększone do 3 minut
-            periodSeconds: 30
+            initialDelaySeconds: 60
+            periodSeconds: 15
             failureThreshold: 3
-            timeoutSeconds: 10
+            timeoutSeconds: 5
           readinessProbe:
             httpGet:
               path: /health
               port: 8000
-            initialDelaySeconds: 120 # Zwiększone do 2 minut
-            periodSeconds: 20
+            initialDelaySeconds: 30
+            periodSeconds: 10
             failureThreshold: 3
-            timeoutSeconds: 10
+            timeoutSeconds: 5
           startupProbe:
             httpGet:
               path: /health
               port: 8000
-            initialDelaySeconds: 120 # Zwiększone do 1 minuty
-            periodSeconds: 20
-            failureThreshold: 15 # Więcej prób
-            timeoutSeconds: 10
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 30
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: fastapi-web-service
+  namespace: davtrowebdbvault
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: 8000
+      protocol: TCP
+  selector:
+    app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
+    component: fastapi
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: fastapi-sa
+  namespace: davtrowebdbvault
