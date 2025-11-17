@@ -7,7 +7,7 @@ metadata:
     app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
     component: fastapi
 spec:
-  replicas: 2
+  replicas: 1 # Tymczasowo 1 replika
   selector:
     matchLabels:
       app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
@@ -20,38 +20,18 @@ spec:
     spec:
       serviceAccountName: fastapi-sa
       initContainers:
-        - name: wait-for-postgres
+        - name: wait-for-services
           image: busybox:1.35
           command:
             [
               "sh",
               "-c",
-              'echo "Waiting for postgres..."; sleep 30; until nc -z postgres-db 5432; do echo "waiting for postgres..."; sleep 10; done; echo "postgres ready"',
+              'echo "Waiting for services to be ready..."; sleep 30; echo "Proceeding with startup"',
             ]
-        - name: wait-for-vault
-          image: busybox:1.35
-          command:
-            [
-              "sh",
-              "-c",
-              'echo "Waiting for vault..."; until nc -z vault 8200; do echo "waiting for vault..."; sleep 10; done; echo "vault ready"',
-            ]
-        - name: wait-for-redis
-          image: busybox:1.35
-          command:
-            [
-              "sh",
-              "-c",
-              'echo "Waiting for redis..."; until nc -z redis 6379; do echo "waiting for redis..."; sleep 10; done; echo "redis ready"',
-            ]
-        - name: wait-for-kafka
-          image: busybox:1.35
-          command:
-            [
-              "sh",
-              "-c",
-              'echo "Waiting for kafka..."; until nc -z kafka 9092; do echo "waiting for kafka..."; sleep 10; done; echo "kafka ready"',
-            ]
+          resources:
+            requests:
+              cpu: "10m"
+              memory: "16Mi"
       containers:
         - name: app
           image: ghcr.io/exea-centrum/website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui:latest
