@@ -21,36 +21,36 @@ spec:
       serviceAccountName: fastapi-sa
       initContainers:
         - name: wait-for-postgres
-          image: busybox:1.35
+          image: postgres:13 # Użyj obrazu z pg_isready
           command:
             [
               "sh",
               "-c",
-              "until nc -z postgres-db 5432; do echo waiting for postgres; sleep 2; done; echo postgres ready",
+              'until pg_isready -h postgres-db -p 5432; do echo "waiting for postgres..."; sleep 5; done; echo "postgres ready"',
             ]
         - name: wait-for-vault
-          image: busybox:1.35
+          image: curlimages/curl:latest # Użyj curl do testowania HTTP
           command:
             [
               "sh",
               "-c",
-              "until nc -z vault 8200; do echo waiting for vault; sleep 2; done; echo vault ready",
+              'until curl -f http://vault:8200/v1/sys/health; do echo "waiting for vault..."; sleep 5; done; echo "vault ready"',
             ]
         - name: wait-for-redis
-          image: busybox:1.35
+          image: redis:7-alpine # Użyj redis-cli
           command:
             [
               "sh",
               "-c",
-              "until nc -z redis 6379; do echo waiting for redis; sleep 2; done; echo redis ready",
+              'until redis-cli -h redis ping; do echo "waiting for redis..."; sleep 5; done; echo "redis ready"',
             ]
         - name: wait-for-kafka
-          image: busybox:1.35
+          image: confluentinc/cp-kafka:latest # Użyj kafka-topics
           command:
             [
               "sh",
               "-c",
-              "until nc -z kafka 9092; do echo waiting for kafka; sleep 2; done; echo kafka ready",
+              'until kafka-topics --bootstrap-server kafka:9092 --list; do echo "waiting for kafka..."; sleep 5; done; echo "kafka ready"',
             ]
       containers:
         - name: app
