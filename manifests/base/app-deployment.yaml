@@ -26,7 +26,7 @@ spec:
             [
               "sh",
               "-c",
-              'until nc -z postgres-db 5432; do echo "waiting for postgres..."; sleep 10; done; echo "postgres ready"',
+              'echo "Waiting for postgres..."; sleep 30; until nc -z postgres-db 5432; do echo "waiting for postgres..."; sleep 10; done; echo "postgres ready"',
             ]
         - name: wait-for-vault
           image: busybox:1.35
@@ -34,7 +34,7 @@ spec:
             [
               "sh",
               "-c",
-              'until nc -z vault 8200; do echo "waiting for vault..."; sleep 10; done; echo "vault ready"',
+              'echo "Waiting for vault..."; until nc -z vault 8200; do echo "waiting for vault..."; sleep 10; done; echo "vault ready"',
             ]
         - name: wait-for-redis
           image: busybox:1.35
@@ -42,7 +42,7 @@ spec:
             [
               "sh",
               "-c",
-              'until nc -z redis 6379; do echo "waiting for redis..."; sleep 10; done; echo "redis ready"',
+              'echo "Waiting for redis..."; until nc -z redis 6379; do echo "waiting for redis..."; sleep 10; done; echo "redis ready"',
             ]
         - name: wait-for-kafka
           image: busybox:1.35
@@ -50,7 +50,7 @@ spec:
             [
               "sh",
               "-c",
-              'until nc -z kafka 9092; do echo "waiting for kafka..."; sleep 10; done; echo "kafka ready"',
+              'echo "Waiting for kafka..."; until nc -z kafka 9092; do echo "waiting for kafka..."; sleep 10; done; echo "kafka ready"',
             ]
       containers:
         - name: app
