@@ -21,36 +21,36 @@ spec:
       serviceAccountName: fastapi-sa
       initContainers:
         - name: wait-for-postgres
-          image: postgres:13
+          image: busybox:1.35
           command:
             [
               "sh",
               "-c",
-              "until pg_isready -h postgres-db -p 5432; do echo waiting for postgres; sleep 5; done; echo postgres ready",
+              'until nc -z postgres-db 5432; do echo "waiting for postgres..."; sleep 10; done; echo "postgres ready"',
             ]
         - name: wait-for-vault
-          image: curlimages/curl:latest
+          image: busybox:1.35
           command:
             [
               "sh",
               "-c",
-              "until curl -s http://vault:8200/v1/sys/health > /dev/null; do echo waiting for vault; sleep 5; done; echo vault ready",
+              'until nc -z vault 8200; do echo "waiting for vault..."; sleep 10; done; echo "vault ready"',
             ]
         - name: wait-for-redis
-          image: redis:7-alpine
+          image: busybox:1.35
           command:
             [
               "sh",
               "-c",
-              "until redis-cli -h redis ping; do echo waiting for redis; sleep 5; done; echo redis ready",
+              'until nc -z redis 6379; do echo "waiting for redis..."; sleep 10; done; echo "redis ready"',
             ]
         - name: wait-for-kafka
-          image: confluentinc/cp-kafka:latest
+          image: busybox:1.35
           command:
             [
               "sh",
               "-c",
-              "until kafka-topics --bootstrap-server kafka:9092 --list; do echo waiting for kafka; sleep 5; done; echo kafka ready",
+              'until nc -z kafka 9092; do echo "waiting for kafka..."; sleep 10; done; echo "kafka ready"',
             ]
       containers:
         - name: app
