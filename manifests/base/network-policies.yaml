@@ -9,16 +9,16 @@ spec:
       app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
       component: fastapi
   policyTypes:
-  - Egress
+    - Egress
   egress:
-  - to:
-    - podSelector:
-        matchLabels:
-          app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
-          component: postgres
-    ports:
-    - protocol: TCP
-      port: 5432
+    - to:
+        - podSelector:
+            matchLabels:
+              app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
+              component: postgres
+      ports:
+        - protocol: TCP
+          port: 5432
 
 ---
 apiVersion: networking.k8s.io/v1
@@ -32,15 +32,16 @@ spec:
       app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
       component: fastapi
   policyTypes:
-  - Egress
+    - Egress
   egress:
-  - to:
-    - podSelector:
-        matchLabels:
-          app: redis
-    ports:
-    - protocol: TCP
-      port: 6379
+    - to:
+        - podSelector:
+            matchLabels:
+              app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
+              component: redis
+      ports:
+        - protocol: TCP
+          port: 6379
 
 ---
 apiVersion: networking.k8s.io/v1
@@ -54,16 +55,16 @@ spec:
       app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
       component: worker
   policyTypes:
-  - Egress
+    - Egress
   egress:
-  - to:
-    - podSelector:
-        matchLabels:
-          app: kafka
-          component: kafka
-    ports:
-    - protocol: TCP
-      port: 9092
+    - to:
+        - podSelector:
+            matchLabels:
+              app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
+              component: kafka
+      ports:
+        - protocol: TCP
+          port: 9092
 
 ---
 apiVersion: networking.k8s.io/v1
@@ -74,35 +75,109 @@ metadata:
 spec:
   podSelector:
     matchLabels:
-      app: grafana
+      app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
+      component: grafana
   policyTypes:
-  - Egress
+    - Egress
   egress:
-  - to:
-    - podSelector:
-        matchLabels:
-          app: prometheus
-    ports:
-    - protocol: TCP
-      port: 9090
-  - to:
-    - podSelector:
-        matchLabels:
-          app: loki
-    ports:
-    - protocol: TCP
-      port: 3100
-  - to:
-    - podSelector:
-        matchLabels:
-          app: tempo
-    ports:
-    - protocol: TCP
-      port: 3200
-  - to:
-    - podSelector:
-        matchLabels:
-          app: postgres-db
-    ports:
-    - protocol: TCP
-      port: 5432
+    - to:
+        - podSelector:
+            matchLabels:
+              app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
+              component: prometheus
+      ports:
+        - protocol: TCP
+          port: 9090
+    - to:
+        - podSelector:
+            matchLabels:
+              app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
+              component: loki
+      ports:
+        - protocol: TCP
+          port: 3100
+    - to:
+        - podSelector:
+            matchLabels:
+              app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
+              component: tempo
+      ports:
+        - protocol: TCP
+          port: 3200
+    - to:
+        - podSelector:
+            matchLabels:
+              app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
+              component: postgres
+      ports:
+        - protocol: TCP
+          port: 5432
+
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-prometheus-to-postgres-exporter
+  namespace: davtrowebdbvault
+spec:
+  podSelector:
+    matchLabels:
+      app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
+      component: prometheus
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
+              component: postgres-exporter
+      ports:
+        - protocol: TCP
+          port: 9187
+
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-postgres-exporter-to-postgres
+  namespace: davtrowebdbvault
+spec:
+  podSelector:
+    matchLabels:
+      app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
+      component: postgres-exporter
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
+              component: postgres
+      ports:
+        - protocol: TCP
+          port: 5432
+
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-pgadmin-to-postgres
+  namespace: davtrowebdbvault
+spec:
+  podSelector:
+    matchLabels:
+      app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
+      component: pgadmin
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
+              component: postgres
+      ports:
+        - protocol: TCP
+          port: 5432

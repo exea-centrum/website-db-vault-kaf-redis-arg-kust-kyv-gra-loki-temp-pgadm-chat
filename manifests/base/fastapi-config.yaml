@@ -23,7 +23,7 @@ data:
       list_name: "outgoing_messages"
 
     kafka:
-      bootstrap_servers: "kafka-0.kafka.davtrowebdbvault.svc.cluster.local:9092"
+      bootstrap_servers: "kafka:9092"  # POPRAWIONE - krótka nazwa zamiast FQDN
       topic: "survey-topic"
 
     vault:

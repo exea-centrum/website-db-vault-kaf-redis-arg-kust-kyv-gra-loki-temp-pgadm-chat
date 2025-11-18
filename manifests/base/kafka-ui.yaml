@@ -3,26 +3,31 @@ kind: Deployment
 metadata:
   name: kafka-ui
   namespace: davtrowebdbvault
+  labels:
+    app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
+    component: kafka-ui
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: kafka-ui
+      app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
+      component: kafka-ui
   template:
     metadata:
       labels:
-        app: kafka-ui
+        app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
+        component: kafka-ui
     spec:
       containers:
         - name: kafka-ui
-          image: provectuslabs/kafka-ui:latest # ZMIEŃ OBRAZ - oficjalny Kafka UI
+          image: provectuslabs/kafka-ui:latest
           ports:
-            - containerPort: 8080 # ZMIEŃ PORT na 8080
+            - containerPort: 8080
           env:
             - name: KAFKA_CLUSTERS_0_NAME
               value: "local"
             - name: KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS
-              value: "kafka:9092" # ZMIEŃ NA KRÓTKĄ NAZWĘ
+              value: "kafka:9092"
             - name: KAFKA_CLUSTERS_0_READONLY
               value: "false"
           resources:
@@ -35,7 +40,7 @@ spec:
           livenessProbe:
             httpGet:
               path: /
-              port: 8080 # ZMIEŃ PORT na 8080
+              port: 8080
             initialDelaySeconds: 30
             periodSeconds: 10
 ---
@@ -46,7 +51,8 @@ metadata:
   namespace: davtrowebdbvault
 spec:
   ports:
-    - port: 8080 # ZMIEŃ PORT na 8080
+    - port: 8080
       targetPort: 8080
   selector:
-    app: kafka-ui
+    app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
+    component: kafka-ui
