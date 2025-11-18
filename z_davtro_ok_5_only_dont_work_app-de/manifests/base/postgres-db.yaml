@@ -3,12 +3,6 @@ kind: Service
 metadata:
   name: postgres-db
   namespace: davtrowebdbvault
-  labels:
-    app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
-    component: postgres
-    app.kubernetes.io/name: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
-    app.kubernetes.io/instance: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
-    app.kubernetes.io/component: postgres
 spec:
   ports:
   - port: 5432
@@ -23,12 +17,6 @@ kind: StatefulSet
 metadata:
   name: postgres-db
   namespace: davtrowebdbvault
-  labels:
-    app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
-    component: postgres
-    app.kubernetes.io/name: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
-    app.kubernetes.io/instance: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
-    app.kubernetes.io/component: postgres
 spec:
   serviceName: postgres-db
   replicas: 1
@@ -41,14 +29,10 @@ spec:
       labels:
         app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
         component: postgres
-        app.kubernetes.io/name: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
-        app.kubernetes.io/instance: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
-        app.kubernetes.io/component: postgres
     spec:
       containers:
       - name: postgres
         image: postgres:15-alpine
-        command: ["postgres", "-c", "listen_addresses=*"]
         env:
         - name: POSTGRES_USER
           value: "webuser"

@@ -876,7 +876,7 @@ YAML
 generate_k8s_manifests(){
  info "Generating ALL Kubernetes manifests..."
 
- # app-deployment - UPDATED with consistent labels
+ # app-deployment
  cat > "${BASE_DIR}/app-deployment.yaml" <<YAML
 apiVersion: apps/v1
 kind: Deployment
@@ -886,9 +886,6 @@ metadata:
   labels:
     app: ${PROJECT}
     component: fastapi
-    app.kubernetes.io/name: ${PROJECT}
-    app.kubernetes.io/instance: ${PROJECT}
-    app.kubernetes.io/component: fastapi
 spec:
   replicas: 2
   selector:
@@ -900,49 +897,8 @@ spec:
       labels:
         app: ${PROJECT}
         component: fastapi
-        app.kubernetes.io/name: ${PROJECT}
-        app.kubernetes.io/instance: ${PROJECT}
-        app.kubernetes.io/component: fastapi
     spec:
       serviceAccountName: fastapi-sa
-      initContainers:
-        - name: wait-for-postgres
-          image: postgres:13
-          command:
-            [
-              "sh",
-              "-c",
-              'until pg_isready -h postgres-db -p 5432 -U webuser; do echo "waiting for postgres..."; sleep 10; done; echo "postgres ready"',
-            ]
-          env:
-            - name: PGPASSWORD
-              value: "testpassword"
-            - name: PGUSER
-              value: "webuser"
-        - name: wait-for-vault
-          image: busybox:1.35
-          command:
-            [
-              "sh",
-              "-c",
-              'until nc -z vault 8200; do echo "waiting for vault..."; sleep 10; done; echo "vault ready"',
-            ]
-        - name: wait-for-redis
-          image: busybox:1.35
-          command:
-            [
-              "sh",
-              "-c",
-              'until nc -z redis 6379; do echo "waiting for redis..."; sleep 10; done; echo "redis ready"',
-            ]
-        - name: wait-for-kafka
-          image: busybox:1.35
-          command:
-            [
-              "sh",
-              "-c",
-              'until nc -z kafka 9092; do echo "waiting for kafka..."; sleep 10; done; echo "kafka ready"',
-            ]
       containers:
       - name: app
         image: ${REGISTRY}:latest
@@ -963,10 +919,6 @@ spec:
           value: "http://vault:8200"
         - name: VAULT_TOKEN
           value: "root"
-        - name: DATABASE_URL
-          value: "dbname=webdb user=webuser password=testpassword host=postgres-db port=5432"
-        - name: PYTHONUNBUFFERED
-          value: "1"
         resources:
           requests:
             cpu: "200m"
@@ -978,38 +930,20 @@ spec:
           httpGet:
             path: /health
             port: 8000
-          initialDelaySeconds: 180
-          periodSeconds: 30
-          failureThreshold: 3
-          timeoutSeconds: 10
+          initialDelaySeconds: 30
+          periodSeconds: 10
         readinessProbe:
           httpGet:
             path: /health
             port: 8000
-          initialDelaySeconds: 120
-          periodSeconds: 20
-          failureThreshold: 3
-          timeoutSeconds: 10
-        startupProbe:
-          httpGet:
-            path: /health
-            port: 8000
-          initialDelaySeconds: 60
-          periodSeconds: 20
-          failureThreshold: 15
-          timeoutSeconds: 10
+          initialDelaySeconds: 10
+          periodSeconds: 5
 ---
 apiVersion: v1
 kind: Service
 metadata:
   name: fastapi-web-service
   namespace: ${NAMESPACE}
-  labels:
-    app: ${PROJECT}
-    component: fastapi
-    app.kubernetes.io/name: ${PROJECT}
-    app.kubernetes.io/instance: ${PROJECT}
-    app.kubernetes.io/component: fastapi
 spec:
   type: ClusterIP
   ports:
@@ -1025,13 +959,9 @@ kind: ServiceAccount
 metadata:
   name: fastapi-sa
   namespace: ${NAMESPACE}
-  labels:
-    app: ${PROJECT}
-    app.kubernetes.io/name: ${PROJECT}
-    app.kubernetes.io/instance: ${PROJECT}
 YAML
 
- # message-processor (worker) - UPDATED with consistent labels
+ # message-processor (worker)
  cat > "${BASE_DIR}/message-processor.yaml" <<YAML
 apiVersion: apps/v1
 kind: Deployment
@@ -1041,9 +971,6 @@ metadata:
   labels:
     app: ${PROJECT}
     component: worker
-    app.kubernetes.io/name: ${PROJECT}
-    app.kubernetes.io/instance: ${PROJECT}
-    app.kubernetes.io/component: worker
 spec:
   replicas: 1
   selector:
@@ -1055,9 +982,6 @@ spec:
       labels:
         app: ${PROJECT}
         component: worker
-        app.kubernetes.io/name: ${PROJECT}
-        app.kubernetes.io/instance: ${PROJECT}
-        app.kubernetes.io/component: worker
     spec:
       containers:
       - name: worker
@@ -1085,19 +1009,13 @@ spec:
             memory: "512Mi"
 YAML
 
- # postgres-db - UPDATED with consistent labels
+ # postgres-db
  cat > "${BASE_DIR}/postgres-db.yaml" <<YAML
 apiVersion: v1
 kind: Service
 metadata:
   name: postgres-db
   namespace: ${NAMESPACE}
-  labels:
-    app: ${PROJECT}
-    component: postgres
-    app.kubernetes.io/name: ${PROJECT}
-    app.kubernetes.io/instance: ${PROJECT}
-    app.kubernetes.io/component: postgres
 spec:
   ports:
   - port: 5432
@@ -1112,12 +1030,6 @@ kind: StatefulSet
 metadata:
   name: postgres-db
   namespace: ${NAMESPACE}
-  labels:
-    app: ${PROJECT}
-    component: postgres
-    app.kubernetes.io/name: ${PROJECT}
-    app.kubernetes.io/instance: ${PROJECT}
-    app.kubernetes.io/component: postgres
 spec:
   serviceName: postgres-db
   replicas: 1
@@ -1130,14 +1042,10 @@ spec:
       labels:
         app: ${PROJECT}
         component: postgres
-        app.kubernetes.io/name: ${PROJECT}
-        app.kubernetes.io/instance: ${PROJECT}
-        app.kubernetes.io/component: postgres
     spec:
       containers:
       - name: postgres
         image: postgres:15-alpine
-        command: ["postgres", "-c", "listen_addresses=*"]
         env:
         - name: POSTGRES_USER
           value: "webuser"
@@ -1175,33 +1083,22 @@ spec:
           storage: 10Gi
 YAML
 
- # pgadmin - UPDATED with consistent labels
+ # pgadmin
  cat > "${BASE_DIR}/pgadmin.yaml" <<YAML
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: pgadmin
   namespace: ${NAMESPACE}
-  labels:
-    app: ${PROJECT}
-    component: pgadmin
-    app.kubernetes.io/name: ${PROJECT}
-    app.kubernetes.io/instance: ${PROJECT}
-    app.kubernetes.io/component: pgadmin
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: ${PROJECT}
-      component: pgadmin
+      app: pgadmin
   template:
     metadata:
       labels:
-        app: ${PROJECT}
-        component: pgadmin
-        app.kubernetes.io/name: ${PROJECT}
-        app.kubernetes.io/instance: ${PROJECT}
-        app.kubernetes.io/component: pgadmin
+        app: pgadmin
     spec:
       containers:
       - name: pgadmin
@@ -1220,54 +1117,28 @@ spec:
           limits:
             cpu: "250m"
             memory: "256Mi"
-        livenessProbe:
-          httpGet:
-            path: /login
-            port: 80
-          initialDelaySeconds: 30
-          periodSeconds: 30
-        readinessProbe:
-          httpGet:
-            path: /login
-            port: 80
-          initialDelaySeconds: 5
-          periodSeconds: 10
 ---
 apiVersion: v1
 kind: Service
 metadata:
   name: pgadmin-service
   namespace: ${NAMESPACE}
-  labels:
-    app: ${PROJECT}
-    component: pgadmin
-    app.kubernetes.io/name: ${PROJECT}
-    app.kubernetes.io/instance: ${PROJECT}
-    app.kubernetes.io/component: pgadmin
 spec:
   type: ClusterIP
   ports:
   - port: 80
     targetPort: 80
-    protocol: TCP
   selector:
-    app: ${PROJECT}
-    component: pgadmin
+    app: pgadmin
 YAML
 
- # vault - UPDATED with consistent labels
- cat > "${BASE_DIR}/vault.yaml" <<YAML
+ # vault - FIXED working configuration
+ cat > "${BASE_DIR}/vault.yaml" <<'YAML'
 apiVersion: v1
 kind: Service
 metadata:
   name: vault
-  namespace: ${NAMESPACE}
-  labels:
-    app: ${PROJECT}
-    component: vault
-    app.kubernetes.io/name: ${PROJECT}
-    app.kubernetes.io/instance: ${PROJECT}
-    app.kubernetes.io/component: vault
+  namespace: davtrowebdbvault
 spec:
   clusterIP: None
   ports:
@@ -1275,35 +1146,23 @@ spec:
     port: 8200
     targetPort: 8200
   selector:
-    app: ${PROJECT}
-    component: vault
+    app: vault
 ---
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: vault
-  namespace: ${NAMESPACE}
-  labels:
-    app: ${PROJECT}
-    component: vault
-    app.kubernetes.io/name: ${PROJECT}
-    app.kubernetes.io/instance: ${PROJECT}
-    app.kubernetes.io/component: vault
+  namespace: davtrowebdbvault
 spec:
   serviceName: vault
   replicas: 1
   selector:
     matchLabels:
-      app: ${PROJECT}
-      component: vault
+      app: vault
   template:
     metadata:
       labels:
-        app: ${PROJECT}
-        component: vault
-        app.kubernetes.io/name: ${PROJECT}
-        app.kubernetes.io/instance: ${PROJECT}
-        app.kubernetes.io/component: vault
+        app: vault
     spec:
       serviceAccountName: vault-sa
       containers:
@@ -1381,77 +1240,92 @@ apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: vault-sa
-  namespace: ${NAMESPACE}
-  labels:
-    app: ${PROJECT}
-    app.kubernetes.io/name: ${PROJECT}
-    app.kubernetes.io/instance: ${PROJECT}
+  namespace: davtrowebdbvault
 YAML
 
- # vault-job - UPDATED with consistent labels
+ # vault-secrets.yaml - FIXED vault configuration
+ cat > "${BASE_DIR}/vault-secrets.yaml" <<YAML
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vault-init
+  namespace: ${NAMESPACE}
+data:
+  init-vault.sh: |
+    #!/bin/bash
+    sleep 10
+    export VAULT_ADDR="http://vault:8200"
+    export VAULT_TOKEN="root"
+    
+    # Enable KV secrets engine
+    vault secrets enable -path=secret kv-v2
+    
+    # Create database secrets
+    vault kv put secret/database/postgres \
+      postgres-user="webuser" \
+      postgres-password="testpassword" \
+      postgres-db="webdb" \
+      postgres-host="postgres-db"
+    
+    # Create Redis secrets
+    vault kv put secret/redis \
+      redis-password=""
+    
+    # Create Kafka secrets  
+    vault kv put secret/kafka \
+      kafka-brokers="kafka:9092"
+    
+    echo "Vault initialization completed"
+YAML
+
+ # vault-job.yaml - FIXED job to initialize Vault
  cat > "${BASE_DIR}/vault-job.yaml" <<YAML
 apiVersion: batch/v1
 kind: Job
 metadata:
   name: vault-init
   namespace: ${NAMESPACE}
-  labels:
-    app: ${PROJECT}
-    component: vault-init
-    app.kubernetes.io/name: ${PROJECT}
-    app.kubernetes.io/instance: ${PROJECT}
-    app.kubernetes.io/component: vault-init
 spec:
   template:
-    metadata:
-      labels:
-        app: ${PROJECT}
-        component: vault-init
-        app.kubernetes.io/name: ${PROJECT}
-        app.kubernetes.io/instance: ${PROJECT}
-        app.kubernetes.io/component: vault-init
     spec:
       serviceAccountName: vault-sa
       containers:
       - name: vault-init
         image: hashicorp/vault:1.15.0
-        command: ["/bin/sh", "-c", "sleep 10 && export VAULT_ADDR=http://vault:8200 && export VAULT_TOKEN=root && vault secrets enable -path=secret kv-v2 && vault kv put secret/database/postgres postgres-user=webuser postgres-password=testpassword postgres-db=webdb postgres-host=postgres-db"]
+        command: ["/bin/sh", "/scripts/init-vault.sh"]
+        volumeMounts:
+        - name: vault-scripts
+          mountPath: /scripts
         env:
         - name: VAULT_ADDR
           value: "http://vault:8200"
         - name: VAULT_TOKEN  
           value: "root"
+      volumes:
+      - name: vault-scripts
+        configMap:
+          name: vault-init
+          defaultMode: 0755
       restartPolicy: OnFailure
   backoffLimit: 3
 YAML
 
- # redis - UPDATED with consistent labels
+ # redis - FIXED with resources
  cat > "${BASE_DIR}/redis.yaml" <<YAML
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: redis
   namespace: ${NAMESPACE}
-  labels:
-    app: ${PROJECT}
-    component: redis
-    app.kubernetes.io/name: ${PROJECT}
-    app.kubernetes.io/instance: ${PROJECT}
-    app.kubernetes.io/component: redis
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: ${PROJECT}
-      component: redis
+      app: redis
   template:
     metadata:
       labels:
-        app: ${PROJECT}
-        component: redis
-        app.kubernetes.io/name: ${PROJECT}
-        app.kubernetes.io/instance: ${PROJECT}
-        app.kubernetes.io/component: redis
+        app: redis
     spec:
       containers:
       - name: redis
@@ -1482,70 +1356,45 @@ kind: Service
 metadata:
   name: redis
   namespace: ${NAMESPACE}
-  labels:
-    app: ${PROJECT}
-    component: redis
-    app.kubernetes.io/name: ${PROJECT}
-    app.kubernetes.io/instance: ${PROJECT}
-    app.kubernetes.io/component: redis
 spec:
   ports:
   - port: 6379
     targetPort: 6379
     protocol: TCP
   selector:
-    app: ${PROJECT}
-    component: redis
+    app: redis
 YAML
 
- # kafka-kraft - UPDATED with consistent labels
+ # kafka-kraft - FIXED working configuration
  cat > "${BASE_DIR}/kafka-kraft.yaml" <<YAML
 apiVersion: v1
 kind: Service
 metadata:
   name: kafka
   namespace: ${NAMESPACE}
-  labels:
-    app: ${PROJECT}
-    component: kafka
-    app.kubernetes.io/name: ${PROJECT}
-    app.kubernetes.io/instance: ${PROJECT}
-    app.kubernetes.io/component: kafka
 spec:
   clusterIP: None
   ports:
   - port: 9092
     name: client
   selector:
-    app: ${PROJECT}
-    component: kafka
+    app: kafka
 ---
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: kafka
   namespace: ${NAMESPACE}
-  labels:
-    app: ${PROJECT}
-    component: kafka
-    app.kubernetes.io/name: ${PROJECT}
-    app.kubernetes.io/instance: ${PROJECT}
-    app.kubernetes.io/component: kafka
 spec:
   serviceName: kafka
   replicas: 1
   selector:
     matchLabels:
-      app: ${PROJECT}
-      component: kafka
+      app: kafka
   template:
     metadata:
       labels:
-        app: ${PROJECT}
-        component: kafka
-        app.kubernetes.io/name: ${PROJECT}
-        app.kubernetes.io/instance: ${PROJECT}
-        app.kubernetes.io/component: kafka
+        app: kafka
     spec:
       containers:
       - name: kafka
@@ -1595,28 +1444,15 @@ spec:
           periodSeconds: 10
 YAML
 
- # kafka-topic-job - UPDATED with consistent labels
+ # kafka-topic-job
  cat > "${BASE_DIR}/kafka-topic-job.yaml" <<YAML
 apiVersion: batch/v1
 kind: Job
 metadata:
   name: create-kafka-topics
   namespace: ${NAMESPACE}
-  labels:
-    app: ${PROJECT}
-    component: kafka-topic-job
-    app.kubernetes.io/name: ${PROJECT}
-    app.kubernetes.io/instance: ${PROJECT}
-    app.kubernetes.io/component: kafka-topic-job
 spec:
   template:
-    metadata:
-      labels:
-        app: ${PROJECT}
-        component: kafka-topic-job
-        app.kubernetes.io/name: ${PROJECT}
-        app.kubernetes.io/instance: ${PROJECT}
-        app.kubernetes.io/component: kafka-topic-job
     spec:
       containers:
       - name: create-topics
@@ -1646,33 +1482,22 @@ spec:
   backoffLimit: 3
 YAML
 
- # kafka-ui - UPDATED with consistent labels
+ # kafka-ui
  cat > "${BASE_DIR}/kafka-ui.yaml" <<YAML
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: kafka-ui
   namespace: ${NAMESPACE}
-  labels:
-    app: ${PROJECT}
-    component: kafka-ui
-    app.kubernetes.io/name: ${PROJECT}
-    app.kubernetes.io/instance: ${PROJECT}
-    app.kubernetes.io/component: kafka-ui
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: ${PROJECT}
-      component: kafka-ui
+      app: kafka-ui
   template:
     metadata:
       labels:
-        app: ${PROJECT}
-        component: kafka-ui
-        app.kubernetes.io/name: ${PROJECT}
-        app.kubernetes.io/instance: ${PROJECT}
-        app.kubernetes.io/component: kafka-ui
+        app: kafka-ui
     spec:
       containers:
       - name: kafka-ui
@@ -1691,96 +1516,73 @@ spec:
             cpu: "100m"
             memory: "256Mi"
           limits:
-            cpu: "200m"
+            cpu: "250m"
             memory: "512Mi"
-        livenessProbe:
-          httpGet:
-            path: /
-            port: 8080
-          initialDelaySeconds: 30
-          periodSeconds: 10
 ---
 apiVersion: v1
 kind: Service
 metadata:
   name: kafka-ui
   namespace: ${NAMESPACE}
-  labels:
-    app: ${PROJECT}
-    component: kafka-ui
-    app.kubernetes.io/name: ${PROJECT}
-    app.kubernetes.io/instance: ${PROJECT}
-    app.kubernetes.io/component: kafka-ui
 spec:
   ports:
   - port: 8080
     targetPort: 8080
-    protocol: TCP
   selector:
-    app: ${PROJECT}
-    component: kafka-ui
+    app: kafka-ui
 YAML
 
- # fastapi-config - UPDATED with consistent labels
+ # fastapi-config.yaml - FIXED application configuration
  cat > "${BASE_DIR}/fastapi-config.yaml" <<YAML
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: fastapi-config
   namespace: ${NAMESPACE}
-  labels:
-    app: ${PROJECT}
-    app.kubernetes.io/name: ${PROJECT}
-    app.kubernetes.io/instance: ${PROJECT}
 data:
   config.yaml: |
     app:
       name: "Dawid Trojanowski - Personal Website"
       version: "1.0.0"
-      debug: true
-
+      debug: false
+    
     database:
       host: "postgres-db"
       port: 5432
       name: "webdb"
       user: "webuser"
-      password: "testpassword"
-
+    
     redis:
       host: "redis"
       port: 6379
       list_name: "outgoing_messages"
-
+    
     kafka:
       bootstrap_servers: "kafka:9092"
       topic: "survey-topic"
-
+    
     vault:
       url: "http://vault:8200"
       token: "root"
       secret_path: "secret/data/database/postgres"
-
+    
     monitoring:
       enabled: true
       metrics_port: 8000
-
+    
     features:
       survey_enabled: true
       contact_form_enabled: true
       analytics_enabled: true
 YAML
 
- # prometheus-config - UPDATED with consistent labels
+ # prometheus-config
  cat > "${BASE_DIR}/prometheus-config.yaml" <<YAML
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: prometheus-config
   namespace: ${NAMESPACE}
-  labels:
-    app: ${PROJECT}
-    app.kubernetes.io/name: ${PROJECT}
-    app.kubernetes.io/instance: ${PROJECT}
 data:
   prometheus.yml: |
     global:
@@ -1832,33 +1634,22 @@ data:
         scrape_interval: 30s
 YAML
 
- # postgres-exporter - UPDATED with consistent labels
+ # postgres-exporter
  cat > "${BASE_DIR}/postgres-exporter.yaml" <<YAML
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: postgres-exporter
   namespace: ${NAMESPACE}
-  labels:
-    app: ${PROJECT}
-    component: postgres-exporter
-    app.kubernetes.io/name: ${PROJECT}
-    app.kubernetes.io/instance: ${PROJECT}
-    app.kubernetes.io/component: postgres-exporter
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: ${PROJECT}
-      component: postgres-exporter
+      app: postgres-exporter
   template:
     metadata:
       labels:
-        app: ${PROJECT}
-        component: postgres-exporter
-        app.kubernetes.io/name: ${PROJECT}
-        app.kubernetes.io/instance: ${PROJECT}
-        app.kubernetes.io/component: postgres-exporter
+        app: postgres-exporter
     spec:
       containers:
       - name: postgres-exporter
@@ -1893,49 +1684,30 @@ kind: Service
 metadata:
   name: postgres-exporter
   namespace: ${NAMESPACE}
-  labels:
-    app: ${PROJECT}
-    component: postgres-exporter
-    app.kubernetes.io/name: ${PROJECT}
-    app.kubernetes.io/instance: ${PROJECT}
-    app.kubernetes.io/component: postgres-exporter
 spec:
   ports:
   - port: 9187
     targetPort: 9187
-    protocol: TCP
   selector:
-    app: ${PROJECT}
-    component: postgres-exporter
+    app: postgres-exporter
 YAML
 
- # kafka-exporter - UPDATED with consistent labels
+ # kafka-exporter
  cat > "${BASE_DIR}/kafka-exporter.yaml" <<YAML
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: kafka-exporter
   namespace: ${NAMESPACE}
-  labels:
-    app: ${PROJECT}
-    component: kafka-exporter
-    app.kubernetes.io/name: ${PROJECT}
-    app.kubernetes.io/instance: ${PROJECT}
-    app.kubernetes.io/component: kafka-exporter
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: ${PROJECT}
-      component: kafka-exporter
+      app: kafka-exporter
   template:
     metadata:
       labels:
-        app: ${PROJECT}
-        component: kafka-exporter
-        app.kubernetes.io/name: ${PROJECT}
-        app.kubernetes.io/instance: ${PROJECT}
-        app.kubernetes.io/component: kafka-exporter
+        app: kafka-exporter
     spec:
       containers:
       - name: kafka-exporter
@@ -1972,48 +1744,29 @@ kind: Service
 metadata:
   name: kafka-exporter
   namespace: ${NAMESPACE}
-  labels:
-    app: ${PROJECT}
-    component: kafka-exporter
-    app.kubernetes.io/name: ${PROJECT}
-    app.kubernetes.io/instance: ${PROJECT}
-    app.kubernetes.io/component: kafka-exporter
 spec:
   ports:
   - port: 9308
     targetPort: 9308
-    protocol: TCP
   selector:
-    app: ${PROJECT}
-    component: kafka-exporter
+    app: kafka-exporter
 YAML
 
- # node-exporter - UPDATED with consistent labels
+ # node-exporter
  cat > "${BASE_DIR}/node-exporter.yaml" <<YAML
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:
   name: node-exporter
   namespace: ${NAMESPACE}
-  labels:
-    app: ${PROJECT}
-    component: node-exporter
-    app.kubernetes.io/name: ${PROJECT}
-    app.kubernetes.io/instance: ${PROJECT}
-    app.kubernetes.io/component: node-exporter
 spec:
   selector:
     matchLabels:
-      app: ${PROJECT}
-      component: node-exporter
+      app: node-exporter
   template:
     metadata:
       labels:
-        app: ${PROJECT}
-        component: node-exporter
-        app.kubernetes.io/name: ${PROJECT}
-        app.kubernetes.io/instance: ${PROJECT}
-        app.kubernetes.io/component: node-exporter
+        app: node-exporter
     spec:
       containers:
       - name: node-exporter
@@ -2063,34 +1816,22 @@ kind: Service
 metadata:
   name: node-exporter
   namespace: ${NAMESPACE}
-  labels:
-    app: ${PROJECT}
-    component: node-exporter
-    app.kubernetes.io/name: ${PROJECT}
-    app.kubernetes.io/instance: ${PROJECT}
-    app.kubernetes.io/component: node-exporter
 spec:
   ports:
   - port: 9100
     targetPort: 9100
-    protocol: TCP
   selector:
-    app: ${PROJECT}
-    component: node-exporter
+    app: node-exporter
   clusterIP: None
 YAML
 
- # service-monitors - UPDATED with consistent labels
+ # service-monitors
  cat > "${BASE_DIR}/service-monitors.yaml" <<YAML
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
   name: fastapi-monitor
   namespace: ${NAMESPACE}
-  labels:
-    app: ${PROJECT}
-    app.kubernetes.io/name: ${PROJECT}
-    app.kubernetes.io/instance: ${PROJECT}
 spec:
   selector:
     matchLabels:
@@ -2107,15 +1848,10 @@ kind: ServiceMonitor
 metadata:
   name: redis-monitor
   namespace: ${NAMESPACE}
-  labels:
-    app: ${PROJECT}
-    app.kubernetes.io/name: ${PROJECT}
-    app.kubernetes.io/instance: ${PROJECT}
 spec:
   selector:
     matchLabels:
-      app: ${PROJECT}
-      component: redis
+      app: redis
   endpoints:
   - port: redis
     interval: 30s
@@ -2126,15 +1862,10 @@ kind: ServiceMonitor
 metadata:
   name: postgres-monitor
   namespace: ${NAMESPACE}
-  labels:
-    app: ${PROJECT}
-    app.kubernetes.io/name: ${PROJECT}
-    app.kubernetes.io/instance: ${PROJECT}
 spec:
   selector:
     matchLabels:
-      app: ${PROJECT}
-      component: postgres-exporter
+      app: postgres-exporter
   endpoints:
   - port: http
     interval: 30s
@@ -2145,15 +1876,10 @@ kind: ServiceMonitor
 metadata:
   name: kafka-monitor
   namespace: ${NAMESPACE}
-  labels:
-    app: ${PROJECT}
-    app.kubernetes.io/name: ${PROJECT}
-    app.kubernetes.io/instance: ${PROJECT}
 spec:
   selector:
     matchLabels:
-      app: ${PROJECT}
-      component: kafka-exporter
+      app: kafka-exporter
   endpoints:
   - port: http
     interval: 30s
@@ -2164,47 +1890,31 @@ kind: ServiceMonitor
 metadata:
   name: node-monitor
   namespace: ${NAMESPACE}
-  labels:
-    app: ${PROJECT}
-    app.kubernetes.io/name: ${PROJECT}
-    app.kubernetes.io/instance: ${PROJECT}
 spec:
   selector:
     matchLabels:
-      app: ${PROJECT}
-      component: node-exporter
+      app: node-exporter
   endpoints:
   - port: http
     interval: 30s
 YAML
 
- # prometheus - UPDATED with consistent labels
+ # prometheus
  cat > "${BASE_DIR}/prometheus.yaml" <<YAML
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: prometheus
   namespace: ${NAMESPACE}
-  labels:
-    app: ${PROJECT}
-    component: prometheus
-    app.kubernetes.io/name: ${PROJECT}
-    app.kubernetes.io/instance: ${PROJECT}
-    app.kubernetes.io/component: prometheus
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: ${PROJECT}
-      component: prometheus
+      app: prometheus
   template:
     metadata:
       labels:
-        app: ${PROJECT}
-        component: prometheus
-        app.kubernetes.io/name: ${PROJECT}
-        app.kubernetes.io/instance: ${PROJECT}
-        app.kubernetes.io/component: prometheus
+        app: prometheus
     spec:
       containers:
       - name: prometheus
@@ -2243,30 +1953,18 @@ kind: Service
 metadata:
   name: prometheus-service
   namespace: ${NAMESPACE}
-  labels:
-    app: ${PROJECT}
-    component: prometheus
-    app.kubernetes.io/name: ${PROJECT}
-    app.kubernetes.io/instance: ${PROJECT}
-    app.kubernetes.io/component: prometheus
 spec:
   ports:
   - port: 9090
     targetPort: 9090
-    protocol: TCP
   selector:
-    app: ${PROJECT}
-    component: prometheus
+    app: prometheus
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: prometheus-data
   namespace: ${NAMESPACE}
-  labels:
-    app: ${PROJECT}
-    app.kubernetes.io/name: ${PROJECT}
-    app.kubernetes.io/instance: ${PROJECT}
 spec:
   accessModes:
   - ReadWriteOnce
@@ -2275,17 +1973,13 @@ spec:
       storage: 20Gi
 YAML
 
- # grafana-datasource - UPDATED with consistent labels
+ # grafana-datasource - UPDATED with all datasources
  cat > "${BASE_DIR}/grafana-datasource.yaml" <<YAML
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: grafana-datasource
   namespace: ${NAMESPACE}
-  labels:
-    app: ${PROJECT}
-    app.kubernetes.io/name: ${PROJECT}
-    app.kubernetes.io/instance: ${PROJECT}
 data:
   datasources.yaml: |
     apiVersion: 1
@@ -2314,17 +2008,13 @@ data:
         sslmode: "disable"
 YAML
 
- # grafana-dashboards - UPDATED with consistent labels
+ # grafana-dashboards - UPDATED with comprehensive dashboards
  cat > "${BASE_DIR}/grafana-dashboards.yaml" <<YAML
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: grafana-dashboards
   namespace: ${NAMESPACE}
-  labels:
-    app: ${PROJECT}
-    app.kubernetes.io/name: ${PROJECT}
-    app.kubernetes.io/instance: ${PROJECT}
 data:
   fastapi-dashboard.json: |-
     {
@@ -2455,33 +2145,22 @@ data:
     }
 YAML
 
- # grafana - UPDATED with consistent labels
+ # grafana - UPDATED without plugins to avoid timeout issues
  cat > "${BASE_DIR}/grafana.yaml" <<YAML
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: grafana
   namespace: ${NAMESPACE}
-  labels:
-    app: ${PROJECT}
-    component: grafana
-    app.kubernetes.io/name: ${PROJECT}
-    app.kubernetes.io/instance: ${PROJECT}
-    app.kubernetes.io/component: grafana
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: ${PROJECT}
-      component: grafana
+      app: grafana
   template:
     metadata:
       labels:
-        app: ${PROJECT}
-        component: grafana
-        app.kubernetes.io/name: ${PROJECT}
-        app.kubernetes.io/instance: ${PROJECT}
-        app.kubernetes.io/component: grafana
+        app: grafana
     spec:
       containers:
       - name: grafana
@@ -2540,31 +2219,19 @@ kind: Service
 metadata:
   name: grafana-service
   namespace: ${NAMESPACE}
-  labels:
-    app: ${PROJECT}
-    component: grafana
-    app.kubernetes.io/name: ${PROJECT}
-    app.kubernetes.io/instance: ${PROJECT}
-    app.kubernetes.io/component: grafana
 spec:
   type: ClusterIP
   ports:
   - port: 80
     targetPort: 3000
-    protocol: TCP
   selector:
-    app: ${PROJECT}
-    component: grafana
+    app: grafana
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: grafana-storage
   namespace: ${NAMESPACE}
-  labels:
-    app: ${PROJECT}
-    app.kubernetes.io/name: ${PROJECT}
-    app.kubernetes.io/instance: ${PROJECT}
 spec:
   accessModes:
   - ReadWriteOnce
@@ -2577,10 +2244,6 @@ kind: ConfigMap
 metadata:
   name: grafana-dashboard-provisioning
   namespace: ${NAMESPACE}
-  labels:
-    app: ${PROJECT}
-    app.kubernetes.io/name: ${PROJECT}
-    app.kubernetes.io/instance: ${PROJECT}
 data:
   dashboards.yaml: |
     apiVersion: 1
@@ -2596,17 +2259,13 @@ data:
         path: /var/lib/grafana/dashboards
 YAML
 
- # loki-config - UPDATED with consistent labels
+ # loki-config
  cat > "${BASE_DIR}/loki-config.yaml" <<YAML
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: loki-config
   namespace: ${NAMESPACE}
-  labels:
-    app: ${PROJECT}
-    app.kubernetes.io/name: ${PROJECT}
-    app.kubernetes.io/instance: ${PROJECT}
 data:
   loki.yaml: |
     auth_enabled: false
@@ -2644,34 +2303,23 @@ data:
       reporting_enabled: false
 YAML
 
- # loki - UPDATED with consistent labels
+ # loki
  cat > "${BASE_DIR}/loki.yaml" <<YAML
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: loki
   namespace: ${NAMESPACE}
-  labels:
-    app: ${PROJECT}
-    component: loki
-    app.kubernetes.io/name: ${PROJECT}
-    app.kubernetes.io/instance: ${PROJECT}
-    app.kubernetes.io/component: loki
 spec:
   serviceName: loki
   replicas: 1
   selector:
     matchLabels:
-      app: ${PROJECT}
-      component: loki
+      app: loki
   template:
     metadata:
       labels:
-        app: ${PROJECT}
-        component: loki
-        app.kubernetes.io/name: ${PROJECT}
-        app.kubernetes.io/instance: ${PROJECT}
-        app.kubernetes.io/component: loki
+        app: loki
     spec:
       containers:
       - name: loki
@@ -2706,33 +2354,20 @@ kind: Service
 metadata:
   name: loki
   namespace: ${NAMESPACE}
-  labels:
-    app: ${PROJECT}
-    component: loki
-    app.kubernetes.io/name: ${PROJECT}
-    app.kubernetes.io/instance: ${PROJECT}
-    app.kubernetes.io/component: loki
 spec:
   ports:
   - port: 3100
     targetPort: 3100
-    protocol: TCP
   - port: 9096
     targetPort: 9096
-    protocol: TCP
   selector:
-    app: ${PROJECT}
-    component: loki
+    app: loki
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: loki-storage
   namespace: ${NAMESPACE}
-  labels:
-    app: ${PROJECT}
-    app.kubernetes.io/name: ${PROJECT}
-    app.kubernetes.io/instance: ${PROJECT}
 spec:
   accessModes:
   - ReadWriteOnce
@@ -2741,17 +2376,13 @@ spec:
       storage: 10Gi
 YAML
 
- # promtail-config - UPDATED with consistent labels
+ # promtail-config
  cat > "${BASE_DIR}/promtail-config.yaml" <<YAML
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: promtail-config
   namespace: ${NAMESPACE}
-  labels:
-    app: ${PROJECT}
-    app.kubernetes.io/name: ${PROJECT}
-    app.kubernetes.io/instance: ${PROJECT}
 data:
   promtail.yaml: |
     server:
@@ -2810,32 +2441,21 @@ data:
           __path__: /var/log/containers/*.log
 YAML
 
- # promtail - UPDATED with consistent labels
+ # promtail
  cat > "${BASE_DIR}/promtail.yaml" <<YAML
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:
   name: promtail
   namespace: ${NAMESPACE}
-  labels:
-    app: ${PROJECT}
-    component: promtail
-    app.kubernetes.io/name: ${PROJECT}
-    app.kubernetes.io/instance: ${PROJECT}
-    app.kubernetes.io/component: promtail
 spec:
   selector:
     matchLabels:
-      app: ${PROJECT}
-      component: promtail
+      app: promtail
   template:
     metadata:
       labels:
-        app: ${PROJECT}
-        component: promtail
-        app.kubernetes.io/name: ${PROJECT}
-        app.kubernetes.io/instance: ${PROJECT}
-        app.kubernetes.io/component: promtail
+        app: promtail
     spec:
       serviceAccountName: promtail-sa
       containers:
@@ -2881,19 +2501,11 @@ kind: ServiceAccount
 metadata:
   name: promtail-sa
   namespace: ${NAMESPACE}
-  labels:
-    app: ${PROJECT}
-    app.kubernetes.io/name: ${PROJECT}
-    app.kubernetes.io/instance: ${PROJECT}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
   name: promtail-clusterrole
-  labels:
-    app: ${PROJECT}
-    app.kubernetes.io/name: ${PROJECT}
-    app.kubernetes.io/instance: ${PROJECT}
 rules:
 - apiGroups: [""]
   resources: ["nodes", "nodes/proxy", "services", "endpoints", "pods"]
@@ -2906,10 +2518,6 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
   name: promtail-clusterrolebinding
-  labels:
-    app: ${PROJECT}
-    app.kubernetes.io/name: ${PROJECT}
-    app.kubernetes.io/instance: ${PROJECT}
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
@@ -2920,17 +2528,13 @@ subjects:
   namespace: ${NAMESPACE}
 YAML
 
- # tempo-config - UPDATED with consistent labels
+ # tempo-config
  cat > "${BASE_DIR}/tempo-config.yaml" <<YAML
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: tempo-config
   namespace: ${NAMESPACE}
-  labels:
-    app: ${PROJECT}
-    app.kubernetes.io/name: ${PROJECT}
-    app.kubernetes.io/instance: ${PROJECT}
 data:
   tempo.yaml: |
     server:
@@ -2956,34 +2560,23 @@ data:
       max_block_duration: 5m
 YAML
 
- # tempo - UPDATED with consistent labels
+ # tempo
  cat > "${BASE_DIR}/tempo.yaml" <<YAML
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: tempo
   namespace: ${NAMESPACE}
-  labels:
-    app: ${PROJECT}
-    component: tempo
-    app.kubernetes.io/name: ${PROJECT}
-    app.kubernetes.io/instance: ${PROJECT}
-    app.kubernetes.io/component: tempo
 spec:
   serviceName: tempo
   replicas: 1
   selector:
     matchLabels:
-      app: ${PROJECT}
-      component: tempo
+      app: tempo
   template:
     metadata:
       labels:
-        app: ${PROJECT}
-        component: tempo
-        app.kubernetes.io/name: ${PROJECT}
-        app.kubernetes.io/instance: ${PROJECT}
-        app.kubernetes.io/component: tempo
+        app: tempo
     spec:
       containers:
       - name: tempo
@@ -3018,32 +2611,22 @@ kind: Service
 metadata:
   name: tempo
   namespace: ${NAMESPACE}
-  labels:
-    app: ${PROJECT}
-    component: tempo
-    app.kubernetes.io/name: ${PROJECT}
-    app.kubernetes.io/instance: ${PROJECT}
-    app.kubernetes.io/component: tempo
 spec:
   ports:
   - port: 3200
     targetPort: 3200
     name: http
-    protocol: TCP
   - port: 4317
     targetPort: 4317
     name: otlp-grpc
-    protocol: TCP
   - port: 4318
     targetPort: 4318
     name: otlp-http
-    protocol: TCP
   selector:
-    app: ${PROJECT}
-    component: tempo
+    app: tempo
 YAML
 
- # network-policies - UPDATED with consistent labels
+ # network-policies.yaml - FIXED network security
  cat > "${BASE_DIR}/network-policies.yaml" <<YAML
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -3084,8 +2667,7 @@ spec:
   - to:
     - podSelector:
         matchLabels:
-          app: ${PROJECT}
-          component: redis
+          app: redis
     ports:
     - protocol: TCP
       port: 6379
@@ -3107,7 +2689,7 @@ spec:
   - to:
     - podSelector:
         matchLabels:
-          app: ${PROJECT}
+          app: kafka
           component: kafka
     ports:
     - protocol: TCP
@@ -3122,125 +2704,47 @@ metadata:
 spec:
   podSelector:
     matchLabels:
-      app: ${PROJECT}
-      component: grafana
+      app: grafana
   policyTypes:
   - Egress
   egress:
   - to:
     - podSelector:
         matchLabels:
-          app: ${PROJECT}
-          component: prometheus
+          app: prometheus
     ports:
     - protocol: TCP
       port: 9090
   - to:
     - podSelector:
         matchLabels:
-          app: ${PROJECT}
-          component: loki
+          app: loki
     ports:
     - protocol: TCP
       port: 3100
   - to:
     - podSelector:
         matchLabels:
-          app: ${PROJECT}
-          component: tempo
+          app: tempo
     ports:
     - protocol: TCP
       port: 3200
   - to:
     - podSelector:
         matchLabels:
-          app: ${PROJECT}
-          component: postgres
-    ports:
-    - protocol: TCP
-      port: 5432
-
----
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: allow-prometheus-to-postgres-exporter
-  namespace: ${NAMESPACE}
-spec:
-  podSelector:
-    matchLabels:
-      app: ${PROJECT}
-      component: prometheus
-  policyTypes:
-  - Egress
-  egress:
-  - to:
-    - podSelector:
-        matchLabels:
-          app: ${PROJECT}
-          component: postgres-exporter
-    ports:
-    - protocol: TCP
-      port: 9187
-
----
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: allow-postgres-exporter-to-postgres
-  namespace: ${NAMESPACE}
-spec:
-  podSelector:
-    matchLabels:
-      app: ${PROJECT}
-      component: postgres-exporter
-  policyTypes:
-  - Egress
-  egress:
-  - to:
-    - podSelector:
-        matchLabels:
-          app: ${PROJECT}
-          component: postgres
-    ports:
-    - protocol: TCP
-      port: 5432
-
----
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: allow-pgadmin-to-postgres
-  namespace: ${NAMESPACE}
-spec:
-  podSelector:
-    matchLabels:
-      app: ${PROJECT}
-      component: pgadmin
-  policyTypes:
-  - Egress
-  egress:
-  - to:
-    - podSelector:
-        matchLabels:
-          app: ${PROJECT}
-          component: postgres
+          app: postgres-db
     ports:
     - protocol: TCP
       port: 5432
 YAML
 
- # ingress - UPDATED with consistent labels
+ # ingress - UPDATED with Grafana route
  cat > "${BASE_DIR}/ingress.yaml" <<YAML
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: ${PROJECT}-ingress
   namespace: ${NAMESPACE}
-  labels:
-    app: ${PROJECT}
-    app.kubernetes.io/name: ${PROJECT}
-    app.kubernetes.io/instance: ${PROJECT}
   annotations:
     kubernetes.io/ingress.class: "nginx"
     nginx.ingress.kubernetes.io/rewrite-target: /
@@ -3268,16 +2772,12 @@ spec:
               number: 80
 YAML
 
- # kyverno-policy - UPDATED with consistent labels
+ # kyverno-policy - FIXED to be less restrictive for development
  cat > "${BASE_DIR}/kyverno-policy.yaml" <<YAML
 apiVersion: kyverno.io/v1
 kind: ClusterPolicy
 metadata:
   name: require-resource-requests-limits
-  labels:
-    app: ${PROJECT}
-    app.kubernetes.io/name: ${PROJECT}
-    app.kubernetes.io/instance: ${PROJECT}
 spec:
   validationFailureAction: Audit
   background: true
@@ -3301,7 +2801,7 @@ spec:
                 cpu: "?*"
 YAML
 
- # kustomization - UPDATED with all resources
+ # kustomization with ALL resources - UPDATED
  cat > "${BASE_DIR}/kustomization.yaml" <<YAML
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
@@ -3313,6 +2813,7 @@ resources:
  - postgres-db.yaml
  - pgadmin.yaml
  - vault.yaml
+ - vault-secrets.yaml
  - vault-job.yaml
  - redis.yaml
  - kafka-kraft.yaml
@@ -3339,7 +2840,6 @@ resources:
  - kyverno-policy.yaml
 
 commonLabels:
-  app: ${PROJECT}
   app.kubernetes.io/name: ${PROJECT}
   app.kubernetes.io/instance: ${PROJECT}
   app.kubernetes.io/managed-by: kustomize
@@ -3352,10 +2852,6 @@ kind: Application
 metadata:
   name: ${PROJECT}
   namespace: argocd
-  labels:
-    app: ${PROJECT}
-    app.kubernetes.io/name: ${PROJECT}
-    app.kubernetes.io/instance: ${PROJECT}
 spec:
   project: default
   source:
@@ -3379,22 +2875,39 @@ generate_readme(){
  cat > "${ROOT_DIR}/README.md" <<README
 # ${PROJECT} - Complete Monitoring Stack
 
-## 🚀 Now with Consistent Labels and All Components Restored!
+## 🚀 Now with Full Grafana Integration!
 
-### ✅ Fixed Issues:
-- **Spójne etykiety** - wszystkie komponenty używają tej samej konwencji
-- **Przywrócone komponenty** - wszystkie usunięte komponenty przywrócone
-- **Consistent selectors** - wszystkie Service i Deployment używają tych samych selektorów
-- **Fixed network policies** - poprawiona komunikacja między komponentami
+### 📊 Complete Monitoring Architecture
 
-### 🏷️ Label Convention:
-\`\`\`
-app: ${PROJECT}
-component: <service-name>
-app.kubernetes.io/name: ${PROJECT}
-app.kubernetes.io/instance: ${PROJECT}
-app.kubernetes.io/component: <service-name>
-\`\`\`
+Grafana is now fully integrated with ALL components in the cluster:
+
+#### 🔍 Data Sources Configuration:
+- **Prometheus** - Metrics collection from all services
+- **Loki** - Log aggregation from all pods
+- **Tempo** - Distributed tracing
+- **PostgreSQL** - Direct database connection
+
+#### 📈 Metrics Collection:
+- **FastAPI Application** - HTTP metrics, response times, error rates
+- **PostgreSQL** - Database connections, query performance, locks
+- **Redis** - Memory usage, connections, operations
+- **Kafka** - Message rates, consumer lag, topic metrics
+- **Vault** - Seal status, token usage, secret operations
+- **System** - CPU, memory, disk, network (via Node Exporter)
+
+#### 📋 Dashboards Included:
+1. **FastAPI Application Metrics** - HTTP requests, response times, errors
+2. **Kafka Metrics** - Message throughput, consumer lag, broker stats
+3. **PostgreSQL Metrics** - Connections, queries, performance
+4. **Redis Metrics** - Memory, connections, operations
+5. **System Metrics** - CPU, memory, disk, network
+6. **Vault Metrics** - Health, token usage, secret operations
+7. **Comprehensive Monitoring** - All services in one view
+
+#### 🔧 New Exporters Added:
+- **postgres-exporter** - PostgreSQL metrics
+- **kafka-exporter** - Kafka metrics
+- **node-exporter** - System metrics
 
 ## 🛠️ Quick Start
 
@@ -3422,39 +2935,60 @@ kubectl wait --for=condition=complete job/vault-init -n ${NAMESPACE}
 |---------|-----|-------------|
 | Application | http://app.${PROJECT}.local | - |
 | Grafana | http://grafana.${PROJECT}.local | admin/admin |
-| PgAdmin | http://pgadmin.${PROJECT}.local | admin@example.com/adminpassword |
 | Kafka UI | http://kafka-ui.${NAMESPACE}.svc.cluster.local:8080 | - |
+| Vault UI | http://vault.${NAMESPACE}.svc.cluster.local:8200 | root token |
 
-## 🔧 Key Fixes Applied:
+## 📊 Monitoring Flow
 
-1. **PostgreSQL** - dodano \`listen_addresses=*\` i poprawiono init containers
-2. **Consistent Labels** - wszystkie zasoby używają spójnych etykiet
-3. **Network Policies** - poprawiona komunikacja między wszystkimi komponentami
-4. **Health Checks** - dodano poprawne health checks dla wszystkich usług
-5. **Resource Limits** - ustawione sensowne limity zasobów
-6. **All Components Restored** - przywrócono wszystkie usunięte komponenty
+\`\`\`
+Application Logs → Promtail → Loki → Grafana
+Application Metrics → Prometheus → Grafana
+Database Metrics → Postgres Exporter → Prometheus → Grafana
+Kafka Metrics → Kafka Exporter → Prometheus → Grafana
+System Metrics → Node Exporter → Prometheus → Grafana
+Tracing Data → Tempo → Grafana
+\`\`\`
 
-## 📊 Monitoring Stack:
+## 🔍 What You Can Monitor:
 
-- **Prometheus** - metrics collection
-- **Grafana** - dashboards and visualization  
-- **Loki** - log aggregation
-- **Tempo** - distributed tracing
-- **Postgres Exporter** - database metrics
-- **Kafka Exporter** - Kafka metrics
-- **Node Exporter** - system metrics
+### Application Level:
+- HTTP request rates and latency
+- Database query performance
+- Redis cache hit rates
+- Kafka message throughput
+- Error rates and exceptions
+
+### Infrastructure Level:
+- CPU and memory usage
+- Disk I/O and space
+- Network traffic
+- Pod resource consumption
+- Cluster health
+
+### Business Level:
+- Survey response rates
+- User engagement metrics
+- System usage patterns
+- Performance trends
 
 ## 🚀 Features
 
-- **FastAPI** web application with survey system
-- **Redis** for message queue
-- **Kafka** for event streaming
-- **PostgreSQL** for data persistence
-- **Vault** for secrets management
-- **Full monitoring** with Prometheus/Grafana/Loki/Tempo
-- **Network policies** for security
-- **Health checks** and readiness probes
+- **Real-time metrics** from all services
+- **Centralized logging** with Loki
+- **Distributed tracing** with Tempo
+- **Custom dashboards** for each service
+- **Alerting ready** configuration
+- **Persistent storage** for metrics and logs
+- **Auto-discovery** of new services
+- **Multi-level monitoring** (app/infra/business)
 
+## 📝 Notes
+
+- All dashboards are pre-configured and ready to use
+- Metrics are collected every 15 seconds
+- Logs are collected in real-time
+- All data is persisted across pod restarts
+- Grafana is configured with provisioning for easy setup
 README
 }
 
@@ -3467,28 +3001,39 @@ generate_all(){
  generate_k8s_manifests
  generate_readme
  echo
- info "✅ COMPLETE! All issues fixed and components restored!"
- echo "🎯 Key improvements:"
- echo "   🏷️  Consistent labels across all components"
- echo "   🔧 Fixed PostgreSQL connection issues"
- echo "   🌐 Working network policies"
- echo "   🔍 Proper health checks"
- echo "   📊 Complete monitoring stack"
- echo "   🔄 All deleted components restored"
+ info "✅ COMPLETE! Full Grafana Integration Added!"
+ echo "🎯 Grafana now connected to ALL services:"
+ echo "   📊 Prometheus - Metrics from all components"
+ echo "   📝 Loki - Log aggregation"
+ echo "   🔍 Tempo - Distributed tracing"
+ echo "   🗄️ PostgreSQL - Direct database connection"
  echo ""
- echo "📁 Structure:"
- echo "   📁 app/ - FastAPI application with survey system"
- echo "   📁 manifests/base/ - ALL Kubernetes manifests"
- echo "   📄 Dockerfile - Container definition"
- echo "   📄 .github/workflows/ci-cd.yaml - GitHub Actions"
- echo "   📄 README.md - Complete documentation"
+ echo "🎯 New Exporters Added:"
+ echo "   🐘 postgres-exporter - PostgreSQL metrics"
+ echo "   🔄 kafka-exporter - Kafka metrics"
+ echo "   💻 node-exporter - System metrics"
+ echo ""
+ echo "🎯 Comprehensive Dashboards:"
+ echo "   🚀 FastAPI Application"
+ echo "   📊 Kafka Cluster"
+ echo "   🗄️ PostgreSQL Database"
+ echo "   🎯 Redis Cache"
+ echo "   💻 System Metrics"
+ echo "   🔐 Vault Secrets"
+ echo "   📈 Comprehensive Overview"
+ echo ""
+ echo "📁 app/ - FastAPI application with survey system"
+ echo "📁 manifests/base/ - ALL Kubernetes manifests"
+ echo "📄 Dockerfile - Container definition"
+ echo "📄 .github/workflows/ci-cd.yaml - GitHub Actions"
+ echo "📄 README.md - Complete documentation"
  echo
  echo "🚀 Next steps:"
  echo "1. Deploy: kubectl apply -k manifests/base"
  echo "2. Check: kubectl get pods -n ${NAMESPACE}"
- echo "3. Access: http://app.${PROJECT}.local"
- echo "4. Monitor: http://grafana.${PROJECT}.local (admin/admin)"
- echo
+ echo "3. Access Grafana: http://grafana.${PROJECT}.local"
+ echo "4. Login with admin/admin"
+ echo "5. Explore pre-configured dashboards!"
 }
 
 case "${1:-}" in
@@ -3496,7 +3041,7 @@ case "${1:-}" in
  help|-h|--help)
    cat <<EOF
 Usage: $0 generate
-Generates complete website with consistent labels and fixed configuration.
+Generates complete website with FULL Grafana integration and monitoring for all services.
 EOF
    ;;
  *)
