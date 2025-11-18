@@ -16,15 +16,17 @@ spec:
         app: postgres-db
         component: database
     spec:
+      # DODAJ init container
       initContainers:
         - name: fix-permissions
           image: postgres:15-alpine
           command:
-            [
-              "sh",
-              "-c",
-              "chown -R 999:999 /var/lib/postgresql/data && chmod 700 /var/lib/postgresql/data",
-            ]
+            - sh
+            - -c
+            - |
+              chown -R 999:999 /var/lib/postgresql/data
+              chmod 700 /var/lib/postgresql/data
+              ls -la /var/lib/postgresql/data/
           volumeMounts:
             - name: postgres-data
               mountPath: /var/lib/postgresql/data
@@ -42,16 +44,15 @@ spec:
               value: "testpassword"
             - name: POSTGRES_DB
               value: "webdb"
-            # Usunięto PGDATA, aby użyć domyślnej ścieżki lub ustaw na /var/lib/postgresql/data
-            # - name: PGDATA
-            #   value: "/var/lib/postgresql/data"
+            - name: PGDATA
+              value: "/var/lib/postgresql/data/pgdata"
           ports:
             - containerPort: 5432
               name: postgres
           volumeMounts:
             - name: postgres-data
               mountPath: /var/lib/postgresql/data
-              # Usunięto subPath
+              # BRAK subPath tutaj!
           resources:
             requests:
               cpu: "200m"
@@ -62,14 +63,18 @@ spec:
           livenessProbe:
             exec:
               command:
-                ["sh", "-c", "pg_isready -U $POSTGRES_USER -d $POSTGRES_DB"]
+                - sh
+                - -c
+                - "pg_isready -U $POSTGRES_USER -d $POSTGRES_DB"
             initialDelaySeconds: 30
             periodSeconds: 10
             timeoutSeconds: 5
           readinessProbe:
             exec:
               command:
-                ["sh", "-c", "pg_isready -U $POSTGRES_USER -d $POSTGRES_DB"]
+                - sh
+                - -c
+                - "pg_isready -U $POSTGRES_USER -d $POSTGRES_DB"
             initialDelaySeconds: 5
             periodSeconds: 5
             timeoutSeconds: 3
