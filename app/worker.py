@@ -32,6 +32,28 @@ def get_kafka():
             producer.list_topics()
             logger.info("Kafka connected successfully")
             return producer
+ # argocd application
+ cat > "${ROOT_DIR}/argocd-application.yaml" <<YAML
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: ${PROJECT}
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: ${REPO_URL}
+    targetRevision: HEAD
+    path: manifests/base
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: ${NAMESPACE}
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+YAML
+
         except Exception as e:
             logger.warning(f"Kafka connection attempt {attempt + 1} failed: {e}")
             if attempt < max_retries - 1:

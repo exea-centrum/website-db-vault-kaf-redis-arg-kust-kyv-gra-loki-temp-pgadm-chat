@@ -16,7 +16,7 @@ MANIFESTS_DIR="${ROOT_DIR}/manifests"
 BASE_DIR="${MANIFESTS_DIR}/base"
 WORKFLOW_DIR="${ROOT_DIR}/.github/workflows"
 
-info(){ printf "🔧 [unified] %s\n" "$*"; }
+info(){ printf "🔧 %s\n" "$*"; }
 mkdir_p(){ mkdir -p "$@"; }
 
 generate_structure(){
@@ -384,28 +384,6 @@ def get_kafka():
             producer.list_topics()
             logger.info("Kafka connected successfully")
             return producer
- # argocd application
- cat > "${ROOT_DIR}/argocd-application.yaml" <<YAML
-apiVersion: argoproj.io/v1alpha1
-kind: Application
-metadata:
-  name: ${PROJECT}
-  namespace: argocd
-spec:
-  project: default
-  source:
-    repoURL: ${REPO_URL}
-    targetRevision: HEAD
-    path: manifests/base
-  destination:
-    server: https://kubernetes.default.svc
-    namespace: ${NAMESPACE}
-  syncPolicy:
-    automated:
-      prune: true
-      selfHeal: true
-YAML
-
         except Exception as e:
             logger.warning(f"Kafka connection attempt {attempt + 1} failed: {e}")
             if attempt < max_retries - 1:
@@ -1282,7 +1260,7 @@ spec:
 YAML
 
  # vault - UPDATED with consistent labels
- cat > "${BASE_DIR}/vault.yaml" <<'YAML'
+ cat > "${BASE_DIR}/vault.yaml" <<YAML
 apiVersion: v1
 kind: Service
 metadata:
@@ -3417,28 +3395,6 @@ commonLabels:
   app.kubernetes.io/name: ${PROJECT}
   app.kubernetes.io/instance: ${PROJECT}
   app.kubernetes.io/managed-by: kustomize
-YAML
-
- # argocd application
- cat > "${ROOT_DIR}/argocd-application.yaml" <<YAML
-apiVersion: argoproj.io/v1alpha1
-kind: Application
-metadata:
-  name: ${PROJECT}
-  namespace: argocd
-spec:
-  project: default
-  source:
-    repoURL: ${REPO_URL}
-    targetRevision: HEAD
-    path: manifests/base
-  destination:
-    server: https://kubernetes.default.svc
-    namespace: ${NAMESPACE}
-  syncPolicy:
-    automated:
-      prune: true
-      selfHeal: true
 YAML
 
  info "All Kubernetes manifests written to ${BASE_DIR}."

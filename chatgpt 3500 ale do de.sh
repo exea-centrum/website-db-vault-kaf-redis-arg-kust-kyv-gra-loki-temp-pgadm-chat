@@ -27,10 +27,6 @@ generate_structure(){
 generate_fastapi_app(){
  info "Generating FastAPI app with survey system..."
 
- cat > "${APP_DIR}/__init__.py" <<'PY'
-# FastAPI Application Package
-PY
-
  cat > "${APP_DIR}/main.py" <<'PY'
 from fastapi import FastAPI, Form, Request, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse
@@ -384,28 +380,6 @@ def get_kafka():
             producer.list_topics()
             logger.info("Kafka connected successfully")
             return producer
- # argocd application
- cat > "${ROOT_DIR}/argocd-application.yaml" <<YAML
-apiVersion: argoproj.io/v1alpha1
-kind: Application
-metadata:
-  name: ${PROJECT}
-  namespace: argocd
-spec:
-  project: default
-  source:
-    repoURL: ${REPO_URL}
-    targetRevision: HEAD
-    path: manifests/base
-  destination:
-    server: https://kubernetes.default.svc
-    namespace: ${NAMESPACE}
-  syncPolicy:
-    automated:
-      prune: true
-      selfHeal: true
-YAML
-
         except Exception as e:
             logger.warning(f"Kafka connection attempt {attempt + 1} failed: {e}")
             if attempt < max_retries - 1:
@@ -902,7 +876,7 @@ YAML
 generate_k8s_manifests(){
  info "Generating ALL Kubernetes manifests..."
 
- # app-deployment - UPDATED with consistent labels and fixed init containers
+ # app-deployment - UPDATED with consistent labels
  cat > "${BASE_DIR}/app-deployment.yaml" <<YAML
 apiVersion: apps/v1
 kind: Deployment
@@ -1282,7 +1256,7 @@ spec:
 YAML
 
  # vault - UPDATED with consistent labels
- cat > "${BASE_DIR}/vault.yaml" <<'YAML'
+ cat > "${BASE_DIR}/vault.yaml" <<YAML
 apiVersion: v1
 kind: Service
 metadata:
@@ -1414,46 +1388,7 @@ metadata:
     app.kubernetes.io/instance: ${PROJECT}
 YAML
 
- # vault-secrets.yaml - FIXED vault configuration
- cat > "${BASE_DIR}/vault-secrets.yaml" <<YAML
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: vault-init
-  namespace: ${NAMESPACE}
-  labels:
-    app: ${PROJECT}
-    app.kubernetes.io/name: ${PROJECT}
-    app.kubernetes.io/instance: ${PROJECT}
-data:
-  init-vault.sh: |
-    #!/bin/bash
-    sleep 10
-    export VAULT_ADDR="http://vault:8200"
-    export VAULT_TOKEN="root"
-    
-    # Enable KV secrets engine
-    vault secrets enable -path=secret kv-v2
-    
-    # Create database secrets
-    vault kv put secret/database/postgres \
-      postgres-user="webuser" \
-      postgres-password="testpassword" \
-      postgres-db="webdb" \
-      postgres-host="postgres-db"
-    
-    # Create Redis secrets
-    vault kv put secret/redis \
-      redis-password=""
-    
-    # Create Kafka secrets  
-    vault kv put secret/kafka \
-      kafka-brokers="kafka:9092"
-    
-    echo "Vault initialization completed"
-YAML
-
- # vault-job.yaml - FIXED job to initialize Vault
+ # vault-job - UPDATED with consistent labels
  cat > "${BASE_DIR}/vault-job.yaml" <<YAML
 apiVersion: batch/v1
 kind: Job
@@ -1480,20 +1415,12 @@ spec:
       containers:
       - name: vault-init
         image: hashicorp/vault:1.15.0
-        command: ["/bin/sh", "/scripts/init-vault.sh"]
-        volumeMounts:
-        - name: vault-scripts
-          mountPath: /scripts
+        command: ["/bin/sh", "-c", "sleep 10 && export VAULT_ADDR=http://vault:8200 && export VAULT_TOKEN=root && vault secrets enable -path=secret kv-v2 && vault kv put secret/database/postgres postgres-user=webuser postgres-password=testpassword postgres-db=webdb postgres-host=postgres-db"]
         env:
         - name: VAULT_ADDR
           value: "http://vault:8200"
         - name: VAULT_TOKEN  
           value: "root"
-      volumes:
-      - name: vault-scripts
-        configMap:
-          name: vault-init
-          defaultMode: 0755
       restartPolicy: OnFailure
   backoffLimit: 3
 YAML
@@ -1668,7 +1595,7 @@ spec:
           periodSeconds: 10
 YAML
 
- # kafka-topic-job
+ # kafka-topic-job - UPDATED with consistent labels
  cat > "${BASE_DIR}/kafka-topic-job.yaml" <<YAML
 apiVersion: batch/v1
 kind: Job
@@ -1843,7 +1770,7 @@ data:
       analytics_enabled: true
 YAML
 
- # prometheus-config
+ # prometheus-config - UPDATED with consistent labels
  cat > "${BASE_DIR}/prometheus-config.yaml" <<YAML
 apiVersion: v1
 kind: ConfigMap
@@ -2153,7 +2080,7 @@ spec:
   clusterIP: None
 YAML
 
- # service-monitors
+ # service-monitors - UPDATED with consistent labels
  cat > "${BASE_DIR}/service-monitors.yaml" <<YAML
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
@@ -2348,7 +2275,7 @@ spec:
       storage: 20Gi
 YAML
 
- # grafana-datasource - UPDATED with all datasources
+ # grafana-datasource - UPDATED with consistent labels
  cat > "${BASE_DIR}/grafana-datasource.yaml" <<YAML
 apiVersion: v1
 kind: ConfigMap
@@ -2387,7 +2314,7 @@ data:
         sslmode: "disable"
 YAML
 
- # grafana-dashboards - UPDATED with comprehensive dashboards
+ # grafana-dashboards - UPDATED with consistent labels
  cat > "${BASE_DIR}/grafana-dashboards.yaml" <<YAML
 apiVersion: v1
 kind: ConfigMap
@@ -2528,7 +2455,7 @@ data:
     }
 YAML
 
- # grafana - UPDATED without plugins to avoid timeout issues
+ # grafana - UPDATED with consistent labels
  cat > "${BASE_DIR}/grafana.yaml" <<YAML
 apiVersion: apps/v1
 kind: Deployment
@@ -2669,7 +2596,7 @@ data:
         path: /var/lib/grafana/dashboards
 YAML
 
- # loki-config
+ # loki-config - UPDATED with consistent labels
  cat > "${BASE_DIR}/loki-config.yaml" <<YAML
 apiVersion: v1
 kind: ConfigMap
@@ -2814,7 +2741,7 @@ spec:
       storage: 10Gi
 YAML
 
- # promtail-config
+ # promtail-config - UPDATED with consistent labels
  cat > "${BASE_DIR}/promtail-config.yaml" <<YAML
 apiVersion: v1
 kind: ConfigMap
@@ -2883,7 +2810,7 @@ data:
           __path__: /var/log/containers/*.log
 YAML
 
- # promtail
+ # promtail - UPDATED with consistent labels
  cat > "${BASE_DIR}/promtail.yaml" <<YAML
 apiVersion: apps/v1
 kind: DaemonSet
@@ -2993,7 +2920,7 @@ subjects:
   namespace: ${NAMESPACE}
 YAML
 
- # tempo-config
+ # tempo-config - UPDATED with consistent labels
  cat > "${BASE_DIR}/tempo-config.yaml" <<YAML
 apiVersion: v1
 kind: ConfigMap
@@ -3374,7 +3301,7 @@ spec:
                 cpu: "?*"
 YAML
 
- # kustomization with ALL resources - UPDATED
+ # kustomization - UPDATED with all resources
  cat > "${BASE_DIR}/kustomization.yaml" <<YAML
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
@@ -3386,7 +3313,6 @@ resources:
  - postgres-db.yaml
  - pgadmin.yaml
  - vault.yaml
- - vault-secrets.yaml
  - vault-job.yaml
  - redis.yaml
  - kafka-kraft.yaml
@@ -3426,6 +3352,10 @@ kind: Application
 metadata:
   name: ${PROJECT}
   namespace: argocd
+  labels:
+    app: ${PROJECT}
+    app.kubernetes.io/name: ${PROJECT}
+    app.kubernetes.io/instance: ${PROJECT}
 spec:
   project: default
   source:
