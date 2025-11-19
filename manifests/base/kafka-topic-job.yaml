@@ -21,7 +21,7 @@ spec:
     spec:
       containers:
         - name: create-topics
-          image: apache/kafka:4.1.0
+          image: apache/kafka:4.1.0 # ZMIANA TUTAJ
           command:
             - /bin/sh
             - -c
@@ -34,7 +34,13 @@ spec:
               done
 
               # Create survey topic
-              /opt/bitnami/kafka/bin/kafka-topics.sh --create             --bootstrap-server kafka:9092             --topic survey-topic             --partitions 3             --replication-factor 1             --config retention.ms=604800000             --if-not-exists
+              /opt/kafka/bin/kafka-topics.sh --create \
+                --bootstrap-server kafka:9092 \
+                --topic survey-topic \
+                --partitions 3 \
+                --replication-factor 1 \
+                --config retention.ms=604800000 \
+                --if-not-exists
 
               echo "Kafka topics created successfully"
       restartPolicy: OnFailure
