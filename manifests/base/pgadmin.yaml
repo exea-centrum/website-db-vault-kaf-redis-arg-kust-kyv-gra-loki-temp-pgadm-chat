@@ -24,40 +24,73 @@ spec:
         app.kubernetes.io/instance: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
         app.kubernetes.io/component: pgadmin
     spec:
+      initContainers:
+        - name: wait-for-postgres
+          image: busybox:1.35
+          command:
+            - "sh"
+            - "-c"
+            - |
+              echo "Waiting for PostgreSQL to be ready..."
+              until nc -z postgres-db 5432; do
+                echo "Waiting for PostgreSQL..."
+                sleep 5
+              done
+              echo "PostgreSQL is ready!"
       containers:
-      - name: pgadmin
-        image: dpage/pgadmin4:latest
-        env:
-        - name: PGADMIN_DEFAULT_EMAIL
-          value: "admin@example.com"
-        - name: PGADMIN_DEFAULT_PASSWORD
-          value: "adminpassword"
-        ports:
-        - containerPort: 80
-        resources:
-          requests:
-            cpu: "100m"
-            memory: "128Mi"
-          limits:
-            cpu: "250m"
-            memory: "256Mi"
-        livenessProbe:
-          httpGet:
-            path: /login
-            port: 80
-          initialDelaySeconds: 30
-          periodSeconds: 30
-        readinessProbe:
-          httpGet:
-            path: /login
-            port: 80
-          initialDelaySeconds: 5
-          periodSeconds: 10
+        - name: pgadmin
+          image: dpage/pgadmin4:7.2 # Użyj konkretnej wersji zamiast latest
+          env:
+            - name: PGADMIN_DEFAULT_EMAIL
+              value: "admin@example.com"
+            - name: PGADMIN_DEFAULT_PASSWORD
+              value: "adminpassword"
+            - name: PGADMIN_CONFIG_SERVER_MODE
+              value: "False"
+            - name: PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED
+              value: "False"
+            - name: PGADMIN_CONFIG_UPGRADE_CHECK_ENABLED
+              value: "False"
+            - name: PGADMIN_CONFIG_CONSOLE_LOG_LEVEL
+              value: "10"
+          ports:
+            - containerPort: 80
+              name: http
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "512Mi" # ZWIĘKSZONE Z 128Mi
+            limits:
+              cpu: "500m" # ZWIĘKSZONE Z 250m
+              memory: "1Gi" # ZWIĘKSZONE Z 256Mi
+          livenessProbe:
+            httpGet:
+              path: /misc/ping
+              port: 80
+            initialDelaySeconds: 120 # ZWIĘKSZONE - pgAdmin potrzebuje czasu na start
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /misc/ping
+              port: 80
+            initialDelaySeconds: 60
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          volumeMounts:
+            - name: pgadmin-data
+              mountPath: /var/lib/pgadmin
+      volumes:
+        - name: pgadmin-data
+          persistentVolumeClaim:
+            claimName: pgadmin-storage
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: pgadmin-service
+  name: pgadmin
   namespace: davtrowebdbvault
   labels:
     app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
@@ -66,11 +99,27 @@ metadata:
     app.kubernetes.io/instance: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
     app.kubernetes.io/component: pgadmin
 spec:
-  type: ClusterIP
   ports:
-  - port: 80
-    targetPort: 80
-    protocol: TCP
+    - name: http
+      port: 80
+      targetPort: 80
+      protocol: TCP
   selector:
     app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
     component: pgadmin
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: pgadmin-storage
+  namespace: davtrowebdbvault
+  labels:
+    app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
+    app.kubernetes.io/name: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
+    app.kubernetes.io/instance: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 2Gi

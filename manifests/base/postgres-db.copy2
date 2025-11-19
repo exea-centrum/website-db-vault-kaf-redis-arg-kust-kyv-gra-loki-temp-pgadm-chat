@@ -3,18 +3,11 @@ kind: Service
 metadata:
   name: postgres-db
   namespace: davtrowebdbvault
-  labels:
-    app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
-    component: postgres
-    app.kubernetes.io/name: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
-    app.kubernetes.io/instance: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
-    app.kubernetes.io/component: postgres
 spec:
   ports:
-    - name: postgres
-      port: 5432
+    - port: 5432
+      name: postgres
       targetPort: 5432
-      protocol: TCP
   selector:
     app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
     component: postgres

@@ -3,20 +3,29 @@ kind: Kustomization
 namespace: davtrowebdbvault
 
 resources:
-  - app-deployment.yaml
-  - message-processor.yaml
+  # 1. Najpierw konfiguracja
+  - kafka-config.yaml
+  - fastapi-config.yaml
+
+  # 2. Potem bazy danych i storage
   - postgres-db.yaml
-  - pgadmin.yaml
-  - vault.yaml
-  - vault-secrets.yaml
-  - vault-job.yaml
   - redis.yaml
+  - vault.yaml
+
+  # 3. Potem Kafka (musi działać przed exporter i UI)
   - kafka-kraft.yaml
   - kafka-topic-job.yaml
-  - kafka-ui.yaml
-  - kafka-config.yaml
+
+  # 4. Potem monitoring Kafka (dopiero po uruchomieniu Kafka)
   - kafka-exporter.yaml
-  - fastapi-config.yaml
+  - kafka-ui.yaml
+  - worker-config.yaml
+
+  # 5. Potem aplikacja
+  - app-deployment.yaml
+  - message-processor.yaml
+
+  # 6. Potem reszta monitoring
   - prometheus-config.yaml
   - postgres-exporter.yaml
   - node-exporter.yaml
@@ -31,6 +40,11 @@ resources:
   - promtail.yaml
   - tempo-config.yaml
   - tempo.yaml
+
+  # 7. Na końcu UI i networking
+  - pgadmin.yaml
+  - vault-secrets.yaml
+  - vault-job.yaml
   - network-policies.yaml
   - ingress.yaml
   - kyverno-policy.yaml
