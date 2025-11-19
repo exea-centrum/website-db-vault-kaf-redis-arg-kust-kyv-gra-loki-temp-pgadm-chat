@@ -14,10 +14,11 @@ resources:
   - kafka-kraft.yaml
   - kafka-topic-job.yaml
   - kafka-ui.yaml
+  - kafka-config.yaml
+  - kafka-exporter.yaml
   - fastapi-config.yaml
   - prometheus-config.yaml
   - postgres-exporter.yaml
-  - kafka-exporter.yaml
   - node-exporter.yaml
   - service-monitors.yaml
   - prometheus.yaml
