@@ -2,16 +2,19 @@ apiVersion: v1
 kind: Service
 metadata:
   name: vault
-  namespace: davtrowebdbvault # ZAMIENIONE
+  namespace: davtrowebdbvault
   labels:
-    app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui # ZAMIENIONE
+    app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
     component: vault
+    app.kubernetes.io/name: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
+    app.kubernetes.io/instance: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
+    app.kubernetes.io/component: vault
 spec:
-  clusterIP: None
   ports:
     - name: http
       port: 8200
       targetPort: 8200
+      protocol: TCP
   selector:
     app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
     component: vault

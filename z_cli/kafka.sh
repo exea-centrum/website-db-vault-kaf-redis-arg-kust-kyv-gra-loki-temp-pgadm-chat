@@ -98,3 +98,14 @@ kustomize build
 kustomize build /path/to/your/repo/manifests/base
 
 # Jeśli działa, zastosuj przez ArgoCD
+Sprawdzenie czy działa:
+bash
+# Sprawdź status podów
+kubectl get pods -n davtrowebdbvault
+
+# Sprawdź logi Kafka Exporter
+kubectl logs -n davtrowebdbvault deployment/kafka-exporter -f
+
+# Sprawdź czy Kafka Exporter zbiera metryki
+kubectl port-forward -n davtrowebdbvault svc/kafka-exporter 9308:9308
+# Następnie w przeglądarce: http://localhost:9308/metrics
