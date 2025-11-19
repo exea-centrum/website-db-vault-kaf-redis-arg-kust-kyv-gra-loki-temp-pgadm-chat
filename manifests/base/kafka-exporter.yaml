@@ -39,7 +39,7 @@ spec:
               echo "Kafka is ready!"
       containers:
         - name: kafka-exporter
-          image: bitnami/kafka-exporter:latest
+          image: danielqsj/kafka-exporter:latest
           ports:
             - containerPort: 9308
           env:
@@ -83,6 +83,7 @@ spec:
     - port: 9308
       targetPort: 9308
       protocol: TCP
+      name: http-metrics
   selector:
     app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
     component: kafka-exporter
