@@ -16,7 +16,6 @@ spec:
         app: postgres-db
         component: database
     spec:
-      # DODAJ init container
       initContainers:
         - name: fix-permissions
           image: postgres:15-alpine
@@ -24,12 +23,20 @@ spec:
             - sh
             - -c
             - |
+              # Sprawdź, czy katalog istnieje, a jeśli nie, utwórz go
+              if [ ! -d /var/lib/postgresql/data ]; then
+                mkdir -p /var/lib/postgresql/data
+              fi
               chown -R 999:999 /var/lib/postgresql/data
               chmod 700 /var/lib/postgresql/data
               ls -la /var/lib/postgresql/data/
           volumeMounts:
             - name: postgres-data
               mountPath: /var/lib/postgresql/data
+          # Uruchom jako root, aby mieć pewność, że uprawnienia zostaną zmienione
+          securityContext:
+            runAsUser: 0
+            runAsGroup: 0
       securityContext:
         runAsUser: 999
         runAsGroup: 999
@@ -52,7 +59,6 @@ spec:
           volumeMounts:
             - name: postgres-data
               mountPath: /var/lib/postgresql/data
-              # BRAK subPath tutaj!
           resources:
             requests:
               cpu: "200m"
