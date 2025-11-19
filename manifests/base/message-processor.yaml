@@ -1,99 +1,83 @@
-apiVersion: apps/v1
-kind: Deployment
+apiVersion: v1
+kind: Service
 metadata:
-  name: message-processor
+  name: postgres-db
   namespace: davtrowebdbvault
   labels:
     app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
-    component: worker
+    component: postgres
     app.kubernetes.io/name: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
     app.kubernetes.io/instance: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
-    app.kubernetes.io/component: worker
+    app.kubernetes.io/component: postgres
 spec:
-  replicas: 1
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: 5432
+      protocol: TCP
   selector:
-    matchLabels:
-      app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
-      component: worker
-  template:
-    metadata:
-      labels:
-        app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
-        component: worker
-        app.kubernetes.io/name: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
-        app.kubernetes.io/instance: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
-        app.kubernetes.io/component: worker
-    spec:
-      initContainers:
-        - name: wait-for-services
-          image: busybox:1.35
-          command:
-            - "sh"
-            - "-c"
-            - |
-              echo "Waiting for services..."
-              until nc -z redis 6379; do echo "waiting for redis..."; sleep 5; done
-              until nc -z kafka 9092; do echo "waiting for kafka..."; sleep 5; done
-              until nc -z postgres-db 5432; do echo "waiting for postgres..."; sleep 5; done
-              echo "All services ready!"
-        - name: install-dependencies
-          image: python:3.11-slim
-          command:
-            - "sh"
-            - "-c"
-            - |
-              pip install redis kafka-python psycopg2-binary
-          volumeMounts:
-            - name: worker-script
-              mountPath: /app
-      containers:
-        - name: worker
-          image: python:3.11-slim
-          command:
-            - python
-            - /app/worker.py
-          env:
-            - name: REDIS_HOST
-              value: "redis"
-            - name: REDIS_PORT
-              value: "6379"
-            - name: REDIS_LIST
-              value: "outgoing_messages"
-            - name: KAFKA_BOOTSTRAP_SERVERS
-              value: "kafka:9092"
-            - name: KAFKA_TOPIC
-              value: "survey-topic"
-            - name: DATABASE_URL
-              value: "dbname=webdb user=webuser password=testpassword host=postgres-db port=5432"
-          volumeMounts:
-            - name: worker-script
-              mountPath: /app/worker.py
-              subPath: worker.py
-          resources:
-            requests:
-              cpu: "200m"
-              memory: "256Mi"
-            limits:
-              cpu: "500m"
-              memory: "512Mi"
-          livenessProbe:
-            exec:
-              command:
-                - python
-                - -c
-                - "import redis; redis.Redis(host='redis', port=6379).ping()"
-            initialDelaySeconds: 60
-            periodSeconds: 30
-          readinessProbe:
-            exec:
-              command:
-                - python
-                - -c
-                - "import redis; redis.Redis(host='redis', port=6379).ping()"
-            initialDelaySeconds: 30
-            periodSeconds: 10
-      volumes:
-        - name: worker-script
-          configMap:
-            name: worker-script
-            defaultMode: 0755
+    app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
+    component: postgres
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+  namespace: davtrowebdbvault
+  labels:
+    app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
+    component: redis
+    app.kubernetes.io/name: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
+    app.kubernetes.io/instance: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
+    app.kubernetes.io/component: redis
+spec:
+  ports:
+    - name: redis
+      port: 6379
+      targetPort: 6379
+      protocol: TCP
+  selector:
+    app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
+    component: redis
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka
+  namespace: davtrowebdbvault
+  labels:
+    app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
+    component: kafka
+    app.kubernetes.io/name: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
+    app.kubernetes.io/instance: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
+    app.kubernetes.io/component: kafka
+spec:
+  ports:
+    - name: client
+      port: 9092
+      targetPort: 9092
+      protocol: TCP
+  selector:
+    app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
+    component: kafka
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vault
+  namespace: davtrowebdbvault
+  labels:
+    app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
+    component: vault
+    app.kubernetes.io/name: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
+    app.kubernetes.io/instance: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
+    app.kubernetes.io/component: vault
+spec:
+  ports:
+    - name: http
+      port: 8200
+      targetPort: 8200
+      protocol: TCP
+  selector:
+    app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
+    component: vault
