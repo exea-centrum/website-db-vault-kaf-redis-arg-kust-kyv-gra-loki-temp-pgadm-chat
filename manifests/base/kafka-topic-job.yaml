@@ -21,7 +21,7 @@ spec:
     spec:
       containers:
         - name: create-topics
-          image: apache/kafka:4.1.0 # ZMIANA TUTAJ
+          image: apache/kafka:4.1.0
           command:
             - /bin/sh
             - -c
@@ -30,8 +30,10 @@ spec:
               echo "Waiting for Kafka to be ready..."
               until nc -z kafka 9092; do
                 echo "Waiting for Kafka..."
-                sleep 5
+                sleep 10
               done
+
+              echo "Kafka is ready, creating topics..."
 
               # Create survey topic
               /opt/kafka/bin/kafka-topics.sh --create \
@@ -43,5 +45,8 @@ spec:
                 --if-not-exists
 
               echo "Kafka topics created successfully"
+
+              # List topics to verify
+              /opt/kafka/bin/kafka-topics.sh --list --bootstrap-server kafka:9092
       restartPolicy: OnFailure
-  backoffLimit: 3
+  backoffLimit: 5

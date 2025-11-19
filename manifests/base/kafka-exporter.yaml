@@ -24,9 +24,22 @@ spec:
         app.kubernetes.io/instance: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
         app.kubernetes.io/component: kafka-exporter
     spec:
+      initContainers:
+        - name: wait-for-kafka
+          image: busybox:1.35
+          command:
+            - "sh"
+            - "-c"
+            - |
+              echo "Waiting for Kafka to be ready..."
+              until nc -z kafka 9092; do
+                echo "Waiting for Kafka..."
+                sleep 5
+              done
+              echo "Kafka is ready!"
       containers:
         - name: kafka-exporter
-          image: danielqsj/kafka-exporter:latest
+          image: bitnami/kafka-exporter:latest
           ports:
             - containerPort: 9308
           env:
@@ -45,13 +58,13 @@ spec:
             httpGet:
               path: /metrics
               port: 9308
-            initialDelaySeconds: 30
+            initialDelaySeconds: 60
             periodSeconds: 10
           readinessProbe:
             httpGet:
               path: /metrics
               port: 9308
-            initialDelaySeconds: 5
+            initialDelaySeconds: 30
             periodSeconds: 5
 ---
 apiVersion: v1
