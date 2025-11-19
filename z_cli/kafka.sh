@@ -73,3 +73,28 @@ kubectl run -it --rm debug --image=busybox:1.35 --restart=Never -- nslookup post
 kubectl run -it --rm debug --image=busybox:1.35 --restart=Never -- nslookup vault.davtrowebdbvault.svc.cluster.local
 kubectl run -it --rm debug --image=busybox:1.35 --restart=Never -- nslookup kafka-0.kafka.davtrowebdbvault.svc.cluster.local
 Zastosuj te poprawione pliki, a problem z kolejnością uruchamiania i rozpoznawaniem nazw powinien zostać rozwiązany.
+Sprawdź czy inne pliki nie mają zduplikowanej zawartości:
+bash
+# Sprawdź czy inne pliki nie mają zduplikowanych definicji
+cd manifests/base
+
+# Sprawdź pliki z wieloma dokumentami YAML
+for file in *.yaml; do
+  echo "Checking $file for duplicate keys..."
+  # Sprawdź czy plik zawiera zduplikowane klucze
+  if grep -q "apiVersion:" "$file" && [ $(grep -c "apiVersion:" "$file") -gt 1 ]; then
+    echo "WARNING: $file might have duplicate YAML documents"
+  fi
+done
+🚀 Test po naprawie:
+bash
+# Przejdź do katalogu manifests/base
+cd manifests/base
+
+# Przetestuj kustomize build
+kustomize build
+
+# Lub z pełną ścieżką
+kustomize build /path/to/your/repo/manifests/base
+
+# Jeśli działa, zastosuj przez ArgoCD
