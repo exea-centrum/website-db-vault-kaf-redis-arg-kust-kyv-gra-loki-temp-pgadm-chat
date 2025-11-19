@@ -1,0 +1,157 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: worker-script
+  namespace: davtrowebdbvault
+  labels:
+    app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
+    app.kubernetes.io/name: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
+    app.kubernetes.io/instance: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
+data:
+  worker.py: |
+    #!/usr/bin/env python3
+    import os
+    import redis
+    from kafka import KafkaConsumer
+    import json
+    import logging
+    import time
+    import psycopg2
+    from psycopg2.extras import RealDictCursor
+
+    # Konfiguracja logging
+    logging.basicConfig(level=logging.INFO)
+    logger = logging.getLogger(__name__)
+
+    # Zmienne środowiskowe
+    REDIS_HOST = os.getenv('REDIS_HOST', 'redis')
+    REDIS_PORT = int(os.getenv('REDIS_PORT', 6379))
+    REDIS_LIST = os.getenv('REDIS_LIST', 'outgoing_messages')
+    KAFKA_BOOTSTRAP_SERVERS = os.getenv('KAFKA_BOOTSTRAP_SERVERS', 'kafka:9092')
+    KAFKA_TOPIC = os.getenv('KAFKA_TOPIC', 'survey-topic')
+    DATABASE_URL = os.getenv('DATABASE_URL', 'dbname=webdb user=webuser password=testpassword host=postgres-db port=5432')
+
+    def wait_for_services():
+        """Czekaj na gotowość usług"""
+        logger.info("Waiting for services to be ready...")
+        
+        # Czekaj na Redis
+        while True:
+            try:
+                r = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, socket_connect_timeout=5)
+                r.ping()
+                logger.info("Redis is ready!")
+                break
+            except:
+                logger.info("Waiting for Redis...")
+                time.sleep(5)
+        
+        # Czekaj na Kafka
+        while True:
+            try:
+                consumer = KafkaConsumer(
+                    bootstrap_servers=[KAFKA_BOOTSTRAP_SERVERS],
+                    value_deserializer=lambda m: json.loads(m.decode('utf-8')),
+                    auto_offset_reset='earliest',
+                    enable_auto_commit=False,
+                    session_timeout_ms=10000
+                )
+                consumer.topics()
+                logger.info("Kafka is ready!")
+                break
+            except:
+                logger.info("Waiting for Kafka...")
+                time.sleep(5)
+        
+        # Czekaj na PostgreSQL
+        while True:
+            try:
+                conn = psycopg2.connect(DATABASE_URL)
+                conn.close()
+                logger.info("PostgreSQL is ready!")
+                break
+            except:
+                logger.info("Waiting for PostgreSQL...")
+                time.sleep(5)
+
+    def process_message(message):
+        """Przetwarzaj wiadomość z Redis i zapisz do bazy danych"""
+        try:
+            # Połącz z bazą danych
+            conn = psycopg2.connect(DATABASE_URL)
+            cursor = conn.cursor()
+            
+            # Sprawdź strukturę wiadomości
+            if isinstance(message, dict):
+                # Wiadomość z formularza
+                name = message.get('name', '')
+                email = message.get('email', '')
+                message_text = message.get('message', '')
+                survey_data = message.get('survey_data', {})
+                
+                # Zapisz do bazy danych
+                cursor.execute("""
+                    INSERT INTO messages (name, email, message, survey_data, created_at)
+                    VALUES (%s, %s, %s, %s, NOW())
+                """, (name, email, message_text, json.dumps(survey_data)))
+                
+            elif isinstance(message, str):
+                # Prosta wiadomość tekstowa
+                cursor.execute("""
+                    INSERT INTO messages (message, created_at)
+                    VALUES (%s, NOW())
+                """, (message,))
+            
+            conn.commit()
+            cursor.close()
+            conn.close()
+            
+            logger.info(f"Successfully processed message: {message}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error processing message: {e}")
+            return False
+
+    def main():
+        """Główna pętla przetwarzania wiadomości"""
+        wait_for_services()
+        
+        # Inicjalizacja klientów
+        redis_client = redis.Redis(host=REDIS_HOST, port=REDIS_PORT)
+        kafka_consumer = KafkaConsumer(
+            KAFKA_TOPIC,
+            bootstrap_servers=[KAFKA_BOOTSTRAP_SERVERS],
+            value_deserializer=lambda m: json.loads(m.decode('utf-8')),
+            auto_offset_reset='earliest',
+            enable_auto_commit=True,
+            group_id='message-processor'
+        )
+        
+        logger.info("Message processor started successfully!")
+        
+        while True:
+            try:
+                # Sprawdź Redis dla starych wiadomości
+                message = redis_client.lpop(REDIS_LIST)
+                if message:
+                    try:
+                        message_data = json.loads(message.decode('utf-8'))
+                        process_message(message_data)
+                    except json.JSONDecodeError:
+                        process_message(message.decode('utf-8'))
+                
+                # Sprawdź Kafka dla nowych wiadomości
+                kafka_messages = kafka_consumer.poll(timeout_ms=1000)
+                for tp, messages in kafka_messages.items():
+                    for message in messages:
+                        process_message(message.value)
+                
+                time.sleep(1)
+                
+            except Exception as e:
+                logger.error(f"Error in main loop: {e}")
+                time.sleep(5)
+
+    if __name__ == "__main__":
+        main()
