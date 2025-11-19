@@ -45,6 +45,20 @@ spec:
         app.kubernetes.io/instance: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
         app.kubernetes.io/component: postgres
     spec:
+      # DODAJ init container
+      initContainers:
+        - name: fix-permissions
+          image: postgres:15-alpine
+          command:
+            - sh
+            - -c
+            - |
+              chown -R 999:999 /var/lib/postgresql/data
+              chmod 700 /var/lib/postgresql/data
+              ls -la /var/lib/postgresql/data/
+          volumeMounts:
+            - name: postgres-data
+              mountPath: /var/lib/postgresql/data
       securityContext:
         runAsUser: 999
         runAsGroup: 999
@@ -60,17 +74,15 @@ spec:
               value: "testpassword"
             - name: POSTGRES_DB
               value: "webdb"
-          securityContext:
-            runAsUser: 999
-            runAsGroup: 999
-            allowPrivilegeEscalation: false
-            capabilities:
-              drop:
-                - ALL
+            - name: PGDATA
+              value: "/var/lib/postgresql/data/pgdata"
+          ports:
+            - containerPort: 5432
+              name: postgres
           volumeMounts:
             - name: postgres-data
               mountPath: /var/lib/postgresql/data
-              subPath: postgres
+              # BRAK subPath tutaj!
           resources:
             requests:
               cpu: "200m"
@@ -80,14 +92,22 @@ spec:
               memory: "512Mi"
           livenessProbe:
             exec:
-              command: ["pg_isready", "-U", "webuser", "-d", "webdb"]
+              command:
+                - sh
+                - -c
+                - "pg_isready -U $POSTGRES_USER -d $POSTGRES_DB"
             initialDelaySeconds: 30
             periodSeconds: 10
+            timeoutSeconds: 5
           readinessProbe:
             exec:
-              command: ["pg_isready", "-U", "webuser", "-d", "webdb"]
+              command:
+                - sh
+                - -c
+                - "pg_isready -U $POSTGRES_USER -d $POSTGRES_DB"
             initialDelaySeconds: 5
             periodSeconds: 5
+            timeoutSeconds: 3
   volumeClaimTemplates:
     - metadata:
         name: postgres-data
