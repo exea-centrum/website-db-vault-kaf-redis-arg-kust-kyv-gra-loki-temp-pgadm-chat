@@ -16,23 +16,28 @@ spec:
         app: postgres-db
         component: database
     spec:
-      # DODAJ init container
       initContainers:
         - name: fix-permissions
-          image: postgres:15-alpine
+          image: alpine:latest # Użyj alpine zamiast postgres
           command:
             - sh
             - -c
             - |
+              echo "Sprawdzam strukturę katalogu:"
+              ls -la /var/lib/postgresql/
+              echo "Tworzę katalog data jeśli nie istnieje:"
+              mkdir -p /var/lib/postgresql/data
+              echo "Zmieniam uprawnienia:"
               chown -R 999:999 /var/lib/postgresql/data
               chmod 700 /var/lib/postgresql/data
+              echo "Finalna struktura:"
               ls -la /var/lib/postgresql/data/
           volumeMounts:
             - name: postgres-data
               mountPath: /var/lib/postgresql/data
       securityContext:
-        runAsUser: 999
-        runAsGroup: 999
+        runAsUser: 0 # Tymczasowo jako root dla initContainera
+        runAsGroup: 0
         fsGroup: 999
       containers:
         - name: postgres
@@ -52,7 +57,6 @@ spec:
           volumeMounts:
             - name: postgres-data
               mountPath: /var/lib/postgresql/data
-              # BRAK subPath tutaj!
           resources:
             requests:
               cpu: "200m"
@@ -63,21 +67,21 @@ spec:
           livenessProbe:
             exec:
               command:
-                - sh
-                - -c
-                - "pg_isready -U $POSTGRES_USER -d $POSTGRES_DB"
+                ["sh", "-c", "pg_isready -U $POSTGRES_USER -d $POSTGRES_DB"]
             initialDelaySeconds: 30
             periodSeconds: 10
             timeoutSeconds: 5
           readinessProbe:
             exec:
               command:
-                - sh
-                - -c
-                - "pg_isready -U $POSTGRES_USER -d $POSTGRES_DB"
+                ["sh", "-c", "pg_isready -U $POSTGRES_USER -d $POSTGRES_DB"]
             initialDelaySeconds: 5
             periodSeconds: 5
             timeoutSeconds: 3
+          securityContext:
+            runAsUser: 999
+            runAsGroup: 999
+            allowPrivilegeEscalation: false
   volumeClaimTemplates:
     - metadata:
         name: postgres-data
