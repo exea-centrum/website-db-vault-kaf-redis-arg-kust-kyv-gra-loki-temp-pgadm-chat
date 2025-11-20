@@ -19,7 +19,6 @@ resources:
   # 4. Potem monitoring Kafka (dopiero po uruchomieniu Kafka)
   - kafka-exporter.yaml
   - kafka-ui.yaml
-  - worker-config.yaml
 
   # 5. Potem aplikacja
   - app-deployment.yaml
