@@ -50,42 +50,7 @@ spec:
       containers:
       - name: vault
         image: hashicorp/vault:1.15.0
-        command: 
-          - /bin/sh
-          - -c
-          - |
-            set -e
-            # Start Vault in dev mode
-            vault server -dev -dev-listen-address=0.0.0.0:8200 -dev-root-token-id=root &
-            VAULT_PID=$!
-            
-            # Wait for Vault to start
-            sleep 5
-            
-            # Set environment for vault CLI
-            export VAULT_ADDR="http://127.0.0.1:8200"
-            export VAULT_TOKEN="root"
-            
-            # Wait for Vault to be ready
-            until vault status > /dev/null 2>&1; do
-              echo "Waiting for Vault to be ready..."
-              sleep 2
-            done
-            
-            # Enable KV v2 secrets engine at 'secret'
-            vault secrets enable -path=secret kv-v2 || true
-            
-            # Create database secrets
-            vault kv put secret/database/postgres \
-              postgres-user="webuser" \
-              postgres-password="testpassword" \
-              postgres-db="webdb" \
-              postgres-host="postgres-db"
-            
-            echo "Vault initialization completed successfully"
-            
-            # Keep Vault running
-            wait $VAULT_PID
+        command: ["vault", "server", "-dev", "-dev-listen-address=0.0.0.0:8200", "-dev-root-token-id=root"]
         ports:
         - containerPort: 8200
         env:
