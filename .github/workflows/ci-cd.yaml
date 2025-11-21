@@ -37,6 +37,7 @@ jobs:
           flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
 
   build-and-push:
+    needs: [lint-and-format]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
