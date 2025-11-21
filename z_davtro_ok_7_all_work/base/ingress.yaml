@@ -10,7 +10,6 @@ metadata:
   annotations:
     kubernetes.io/ingress.class: "nginx"
     nginx.ingress.kubernetes.io/rewrite-target: /
-    nginx.ingress.kubernetes.io/ssl-redirect: "false"
 spec:
   rules:
   - host: app.website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui.local
@@ -33,23 +32,3 @@ spec:
             name: grafana-service
             port:
               number: 80
-  - host: pgadmin.website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui.local
-    http:
-      paths:
-      - path: /
-        pathType: Prefix
-        backend:
-          service:
-            name: pgadmin
-            port:
-              number: 80
-  - host: kafka-ui.website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui.local
-    http:
-      paths:
-      - path: /
-        pathType: Prefix
-        backend:
-          service:
-            name: kafka-ui
-            port:
-              number: 8080

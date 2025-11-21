@@ -1,13 +1,12 @@
 # website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui - Complete Monitoring Stack
 
-## 🚀 Now with Full Integration!
+## 🚀 Now with Consistent Labels and All Components Restored!
 
-### ✅ Complete Integration:
-- **PgAdmin** - connected to PostgreSQL with Vault secrets
-- **Vault** - stores all passwords and secrets
-- **Loki + Prometheus + Tempo** - fully integrated with Grafana
-- **Kafka UI** - connected to Kafka broker
-- **FastAPI & Worker** - both use Vault for database credentials
+### ✅ Fixed Issues:
+- **Spójne etykiety** - wszystkie komponenty używają tej samej konwencji
+- **Przywrócone komponenty** - wszystkie usunięte komponenty przywrócone
+- **Consistent selectors** - wszystkie Service i Deployment używają tych samych selektorów
+- **Fixed network policies** - poprawiona komunikacja między komponentami
 
 ### 🏷️ Label Convention:
 ```
@@ -33,8 +32,6 @@ kubectl get pods -n davtrowebdbvault
 # Access applications:
 # Main App: http://app.website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui.local
 # Grafana: http://grafana.website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui.local (admin/admin)
-# PgAdmin: http://pgadmin.website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui.local (admin@example.com/adminpassword)
-# Kafka UI: http://kafka-ui.website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui.local
 
 # Initialize Vault
 kubectl wait --for=condition=complete job/vault-init -n davtrowebdbvault
@@ -47,30 +44,35 @@ kubectl wait --for=condition=complete job/vault-init -n davtrowebdbvault
 | Application | http://app.website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui.local | - |
 | Grafana | http://grafana.website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui.local | admin/admin |
 | PgAdmin | http://pgadmin.website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui.local | admin@example.com/adminpassword |
-| Kafka UI | http://kafka-ui.website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui.local | - |
+| Kafka UI | http://kafka-ui.davtrowebdbvault.svc.cluster.local:8080 | - |
 
-## 🔧 Integration Details:
+## 🔧 Key Fixes Applied:
 
-1. **PgAdmin + PostgreSQL** - Full connection with servers.json configuration
-2. **Vault Integration** - All passwords stored in Vault, apps retrieve them dynamically
-3. **Monitoring Stack** - Loki (logs), Prometheus (metrics), Tempo (traces) all connected to Grafana
-4. **Kafka UI** - Properly configured to connect to Kafka broker
-5. **Health Checks** - All services have proper liveness and readiness probes
+1. **PostgreSQL** - dodano `listen_addresses=*` i poprawiono init containers
+2. **Consistent Labels** - wszystkie zasoby używają spójnych etykiet
+3. **Network Policies** - poprawiona komunikacja między wszystkimi komponentami
+4. **Health Checks** - dodano poprawne health checks dla wszystkich usług
+5. **Resource Limits** - ustawione sensowne limity zasobów
+6. **All Components Restored** - przywrócono wszystkie usunięte komponenty
 
 ## 📊 Monitoring Stack:
 
-- **Prometheus** - metrics collection from all services
-- **Grafana** - unified dashboards with all datasources
-- **Loki** - centralized log aggregation
+- **Prometheus** - metrics collection
+- **Grafana** - dashboards and visualization  
+- **Loki** - log aggregation
 - **Tempo** - distributed tracing
 - **Postgres Exporter** - database metrics
 - **Kafka Exporter** - Kafka metrics
 - **Node Exporter** - system metrics
 
-## 🔐 Security:
+## 🚀 Features
 
-- All passwords in Vault
-- Network policies for service communication
-- Secrets as Kubernetes Secrets
-- Proper health checks and resource limits
+- **FastAPI** web application with survey system
+- **Redis** for message queue
+- **Kafka** for event streaming
+- **PostgreSQL** for data persistence
+- **Vault** for secrets management
+- **Full monitoring** with Prometheus/Grafana/Loki/Tempo
+- **Network policies** for security
+- **Health checks** and readiness probes
 

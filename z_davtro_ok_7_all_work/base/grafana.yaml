@@ -31,11 +31,9 @@ spec:
         - containerPort: 3000
         env:
         - name: GF_SECURITY_ADMIN_USER
-          value: "admin"
+          value: admin
         - name: GF_SECURITY_ADMIN_PASSWORD
-          value: "admin"
-        - name: GF_INSTALL_PLUGINS
-          value: "grafana-clock-panel,grafana-simple-json-datasource"
+          value: admin
         volumeMounts:
         - name: grafana-storage
           mountPath: /var/lib/grafana

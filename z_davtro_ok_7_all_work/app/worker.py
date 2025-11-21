@@ -3,7 +3,6 @@ import os, json, time, logging
 import redis
 from kafka import KafkaProducer
 import psycopg2
-import hvac
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("worker")
@@ -15,38 +14,7 @@ REDIS_LIST = os.getenv("REDIS_LIST", "outgoing_messages")
 KAFKA_BOOTSTRAP = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka:9092")
 KAFKA_TOPIC = os.getenv("KAFKA_TOPIC", "survey-topic")
 
-def get_vault_secret(secret_path: str) -> dict:
-    try:
-        vault_addr = os.getenv("VAULT_ADDR", "http://vault:8200")
-        vault_token = os.getenv("VAULT_TOKEN")
-        
-        if vault_token:
-            client = hvac.Client(url=vault_addr, token=vault_token)
-            if client.is_authenticated():
-                secret = client.read(secret_path)
-                if secret and 'data' in secret:
-                    return secret['data'].get('data', {})
-        else:
-            logger.warning("Vault token not available, using fallback")
-            
-    except Exception as e:
-        logger.warning(f"Vault error: {e}, using fallback")
-    
-    return {}
-
-def get_database_config() -> str:
-    vault_secret = get_vault_secret("secret/data/database/postgres")
-    
-    if vault_secret:
-        return f"dbname={vault_secret.get('postgres-db', 'webdb')} " \
-               f"user={vault_secret.get('postgres-user', 'webuser')} " \
-               f"password={vault_secret.get('postgres-password', 'testpassword')} " \
-               f"host={vault_secret.get('postgres-host', 'postgres-db')} " \
-               f"port=5432"
-    else:
-        return os.getenv("DATABASE_URL", "dbname=webdb user=webuser password=testpassword host=postgres-db port=5432")
-
-DATABASE_URL = get_database_config()
+DATABASE_URL = os.getenv("DATABASE_URL", "dbname=webdb user=webuser password=testpassword host=postgres-db port=5432")
 
 def get_redis():
     return redis.Redis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=True)

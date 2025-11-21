@@ -36,10 +36,7 @@ spec:
             ]
           env:
             - name: PGPASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: postgres-secrets
-                  key: postgres-password
+              value: "testpassword"
             - name: PGUSER
               value: "webuser"
         - name: wait-for-vault
