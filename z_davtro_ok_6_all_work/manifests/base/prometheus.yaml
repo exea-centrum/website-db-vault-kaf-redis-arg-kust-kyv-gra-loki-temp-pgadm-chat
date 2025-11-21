@@ -1,85 +1,85 @@
 apiVersion: apps/v1
-kind: StatefulSet
+kind: Deployment
 metadata:
-  name: loki
+  name: prometheus
   namespace: davtrowebdbvault
   labels:
     app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
-    component: loki
+    component: prometheus
     app.kubernetes.io/name: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
     app.kubernetes.io/instance: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
-    app.kubernetes.io/component: loki
+    app.kubernetes.io/component: prometheus
 spec:
-  serviceName: loki
   replicas: 1
   selector:
     matchLabels:
       app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
-      component: loki
+      component: prometheus
   template:
     metadata:
       labels:
         app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
-        component: loki
+        component: prometheus
         app.kubernetes.io/name: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
         app.kubernetes.io/instance: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
-        app.kubernetes.io/component: loki
+        app.kubernetes.io/component: prometheus
     spec:
       containers:
-      - name: loki
-        image: grafana/loki:2.9.2
+      - name: prometheus
+        image: prom/prometheus:v2.48.0
         ports:
-        - containerPort: 3100
-        - containerPort: 9096
+        - containerPort: 9090
         volumeMounts:
         - name: config
-          mountPath: /etc/loki
-        - name: storage
-          mountPath: /tmp/loki
+          mountPath: /etc/prometheus
+        - name: data
+          mountPath: /prometheus
         resources:
           requests:
-            cpu: "100m"
-            memory: "256Mi"
-          limits:
             cpu: "500m"
             memory: "1Gi"
+          limits:
+            cpu: "1000m"
+            memory: "2Gi"
         args:
-        - -config.file=/etc/loki/loki.yaml
+        - '--config.file=/etc/prometheus/prometheus.yml'
+        - '--storage.tsdb.path=/prometheus'
+        - '--web.console.libraries=/etc/prometheus/console_libraries'
+        - '--web.console.templates=/etc/prometheus/consoles'
+        - '--storage.tsdb.retention.time=200h'
+        - '--web.enable-lifecycle'
       volumes:
       - name: config
         configMap:
-          name: loki-config
-      - name: storage
+          name: prometheus-config
+      - name: data
         persistentVolumeClaim:
-          claimName: loki-storage
+          claimName: prometheus-data
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: loki
+  name: prometheus-service
   namespace: davtrowebdbvault
   labels:
     app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
-    component: loki
+    component: prometheus
     app.kubernetes.io/name: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
     app.kubernetes.io/instance: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
-    app.kubernetes.io/component: loki
+    app.kubernetes.io/component: prometheus
 spec:
   ports:
-  - port: 3100
-    targetPort: 3100
-    protocol: TCP
-  - port: 9096
-    targetPort: 9096
+  - port: 9090
+    targetPort: 9090
     protocol: TCP
   selector:
     app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
-    component: loki
+    component: prometheus
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: loki-storage
+  name: prometheus-data
   namespace: davtrowebdbvault
   labels:
     app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
@@ -90,4 +90,4 @@ spec:
   - ReadWriteOnce
   resources:
     requests:
-      storage: 10Gi
+      storage: 20Gi

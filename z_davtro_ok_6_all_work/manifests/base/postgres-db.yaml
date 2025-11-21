@@ -1,0 +1,121 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-db
+  namespace: davtrowebdbvault
+  labels:
+    app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
+    component: postgres
+    app.kubernetes.io/name: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
+    app.kubernetes.io/instance: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
+    app.kubernetes.io/component: postgres
+spec:
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: 5432
+      protocol: TCP
+  selector:
+    app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
+    component: postgres
+  clusterIP: None
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres-db
+  namespace: davtrowebdbvault
+spec:
+  serviceName: postgres-db
+  replicas: 1
+  selector:
+    matchLabels:
+      app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
+      component: postgres
+  template:
+    metadata:
+      labels:
+        app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
+        component: postgres
+    spec:
+      initContainers:
+        - name: fix-permissions
+          image: postgres:15-alpine
+          command:
+            - sh
+            - -c
+            - |
+              # Sprawdź, czy katalog istnieje, a jeśli nie, utwórz go
+              if [ ! -d /var/lib/postgresql/data ]; then
+                mkdir -p /var/lib/postgresql/data
+              fi
+              chown -R 999:999 /var/lib/postgresql/data
+              chmod 700 /var/lib/postgresql/data
+              ls -la /var/lib/postgresql/data/
+          volumeMounts:
+            - name: postgres-data
+              mountPath: /var/lib/postgresql/data
+          # Uruchom jako root, aby mieć pewność, że uprawnienia zostaną zmienione
+          securityContext:
+            runAsUser: 0
+            runAsGroup: 0
+      securityContext:
+        runAsUser: 999
+        runAsGroup: 999
+        fsGroup: 999
+      containers:
+        - name: postgres
+          image: postgres:15-alpine
+          env:
+            - name: POSTGRES_USER
+              value: "webuser"
+            - name: POSTGRES_PASSWORD
+              value: "testpassword"
+            - name: POSTGRES_DB
+              value: "webdb"
+            - name: PGDATA
+              value: "/var/lib/postgresql/data/pgdata"
+          ports:
+            - containerPort: 5432
+              name: postgres
+          volumeMounts:
+            - name: postgres-data
+              mountPath: /var/lib/postgresql/data
+          resources:
+            requests:
+              cpu: "200m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          livenessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - "pg_isready -U $POSTGRES_USER -d $POSTGRES_DB"
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+          readinessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - "pg_isready -U $POSTGRES_USER -d $POSTGRES_DB"
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+          securityContext:
+            runAsUser: 999
+            runAsGroup: 999
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+  volumeClaimTemplates:
+    - metadata:
+        name: postgres-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 10Gi

@@ -122,7 +122,7 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: pgadmin-service
+  name: pgadmin
   namespace: davtrowebdbvault
   labels:
     app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
@@ -131,11 +131,11 @@ metadata:
     app.kubernetes.io/instance: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
     app.kubernetes.io/component: pgadmin
 spec:
-  type: ClusterIP
   ports:
-  - port: 80
-    targetPort: 80
-    protocol: TCP
+    - name: http
+      port: 80
+      targetPort: 80
+      protocol: TCP
   selector:
     app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
     component: pgadmin
@@ -151,7 +151,7 @@ metadata:
     app.kubernetes.io/instance: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
 spec:
   accessModes:
-  - ReadWriteOnce
+    - ReadWriteOnce
   resources:
     requests:
       storage: 2Gi

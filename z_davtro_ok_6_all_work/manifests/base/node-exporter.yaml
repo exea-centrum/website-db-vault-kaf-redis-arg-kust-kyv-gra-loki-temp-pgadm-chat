@@ -1,39 +1,33 @@
 apiVersion: apps/v1
-kind: Deployment
+kind: DaemonSet
 metadata:
-  name: kafka-exporter
+  name: node-exporter
   namespace: davtrowebdbvault
   labels:
     app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
-    component: kafka-exporter
+    component: node-exporter
     app.kubernetes.io/name: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
     app.kubernetes.io/instance: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
-    app.kubernetes.io/component: kafka-exporter
+    app.kubernetes.io/component: node-exporter
 spec:
-  replicas: 1
   selector:
     matchLabels:
       app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
-      component: kafka-exporter
+      component: node-exporter
   template:
     metadata:
       labels:
         app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
-        component: kafka-exporter
+        component: node-exporter
         app.kubernetes.io/name: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
         app.kubernetes.io/instance: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
-        app.kubernetes.io/component: kafka-exporter
+        app.kubernetes.io/component: node-exporter
     spec:
       containers:
-      - name: kafka-exporter
-        image: bitnami/kafka-exporter:latest
+      - name: node-exporter
+        image: prom/node-exporter:latest
         ports:
-        - containerPort: 9308
-        env:
-        - name: KAFKA_BROKERS
-          value: "kafka:9092"
-        - name: LOG_LEVEL
-          value: "info"
+        - containerPort: 9100
         resources:
           requests:
             cpu: "100m"
@@ -41,35 +35,54 @@ spec:
           limits:
             cpu: "200m"
             memory: "256Mi"
-        livenessProbe:
-          httpGet:
-            path: /metrics
-            port: 9308
-          initialDelaySeconds: 30
-          periodSeconds: 10
-        readinessProbe:
-          httpGet:
-            path: /metrics
-            port: 9308
-          initialDelaySeconds: 5
-          periodSeconds: 5
+        args:
+        - --path.procfs=/host/proc
+        - --path.sysfs=/host/sys
+        - --path.rootfs=/host/root
+        - --collector.filesystem.ignored-mount-points=^/(sys|proc|dev|host|etc)(126314|/)
+        volumeMounts:
+        - name: proc
+          mountPath: /host/proc
+          readOnly: true
+        - name: sys
+          mountPath: /host/sys
+          readOnly: true
+        - name: root
+          mountPath: /host/root
+          readOnly: true
+      volumes:
+      - name: proc
+        hostPath:
+          path: /proc
+      - name: sys
+        hostPath:
+          path: /sys
+      - name: root
+        hostPath:
+          path: /
+      hostNetwork: true
+      hostPID: true
+      tolerations:
+      - effect: NoSchedule
+        operator: Exists
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: kafka-exporter
+  name: node-exporter
   namespace: davtrowebdbvault
   labels:
     app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
-    component: kafka-exporter
+    component: node-exporter
     app.kubernetes.io/name: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
     app.kubernetes.io/instance: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
-    app.kubernetes.io/component: kafka-exporter
+    app.kubernetes.io/component: node-exporter
 spec:
   ports:
-  - port: 9308
-    targetPort: 9308
+  - port: 9100
+    targetPort: 9100
     protocol: TCP
   selector:
     app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
-    component: kafka-exporter
+    component: node-exporter
+  clusterIP: None

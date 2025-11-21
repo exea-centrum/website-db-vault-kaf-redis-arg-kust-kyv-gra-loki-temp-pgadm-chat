@@ -384,6 +384,28 @@ def get_kafka():
             producer.list_topics()
             logger.info("Kafka connected successfully")
             return producer
+ # argocd application
+ cat > "${ROOT_DIR}/argocd-application.yaml" <<YAML
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: ${PROJECT}
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: ${REPO_URL}
+    targetRevision: HEAD
+    path: manifests/base
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: ${NAMESPACE}
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+YAML
+
         except Exception as e:
             logger.warning(f"Kafka connection attempt {attempt + 1} failed: {e}")
             if attempt < max_retries - 1:
@@ -1035,7 +1057,7 @@ metadata:
     app.kubernetes.io/instance: ${PROJECT}
 YAML
 
- # message-processor (worker) - UPDATED with consistent labels and probes
+ # message-processor (worker) - UPDATED with consistent labels
  cat > "${BASE_DIR}/message-processor.yaml" <<YAML
 apiVersion: apps/v1
 kind: Deployment
@@ -1087,22 +1109,6 @@ spec:
           limits:
             cpu: "500m"
             memory: "512Mi"
-        livenessProbe:
-          exec:
-            command:
-              - sh
-              - -c
-              - 'python -c "import redis; redis.Redis(host=\"redis\", port=6379, socket_connect_timeout=5).ping()"'
-          initialDelaySeconds: 60
-          periodSeconds: 30
-        readinessProbe:
-          exec:
-            command:
-              - sh
-              - -c
-              - 'python -c "import redis; redis.Redis(host=\"redis\", port=6379, socket_connect_timeout=5).ping()"'
-          initialDelaySeconds: 30
-          periodSeconds: 10
 YAML
 
  # postgres-db - UPDATED with consistent labels
@@ -1195,34 +1201,8 @@ spec:
           storage: 10Gi
 YAML
 
- # pgadmin - UPDATED with consistent labels and proper config
+ # pgadmin - UPDATED with consistent labels
  cat > "${BASE_DIR}/pgadmin.yaml" <<YAML
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: pgadmin-servers
-  namespace: ${NAMESPACE}
-  labels:
-    app: ${PROJECT}
-    app.kubernetes.io/name: ${PROJECT}
-    app.kubernetes.io/instance: ${PROJECT}
-data:
-  servers.json: |
-    {
-      "Servers": {
-        "1": {
-          "Name": "PostgreSQL Database",
-          "Group": "Servers",
-          "Host": "postgres-db",
-          "Port": 5432,
-          "MaintenanceDB": "webdb",
-          "Username": "webuser",
-          "Password": "testpassword",
-          "SSLMode": "prefer"
-        }
-      }
-    }
----
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -1249,74 +1229,35 @@ spec:
         app.kubernetes.io/instance: ${PROJECT}
         app.kubernetes.io/component: pgadmin
     spec:
-      initContainers:
-        - name: wait-for-postgres
-          image: busybox:1.35
-          command:
-            - "sh"
-            - "-c"
-            - |
-              echo "Waiting for PostgreSQL to be ready..."
-              until nc -z postgres-db 5432; do
-                echo "Waiting for PostgreSQL..."
-                sleep 10
-              done
-              echo "PostgreSQL is ready!"
       containers:
-        - name: pgadmin
-          image: dpage/pgadmin4:7.2
-          env:
-            - name: PGADMIN_DEFAULT_EMAIL
-              value: "admin@example.com"
-            - name: PGADMIN_DEFAULT_PASSWORD
-              value: "adminpassword"
-            - name: PGADMIN_CONFIG_SERVER_MODE
-              value: "False"
-            - name: PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED
-              value: "False"
-            - name: PGADMIN_CONFIG_UPGRADE_CHECK_ENABLED
-              value: "False"
-            - name: PGADMIN_CONFIG_CONSOLE_LOG_LEVEL
-              value: "10"
-          ports:
-            - containerPort: 80
-              name: http
-          resources:
-            requests:
-              cpu: "100m"
-              memory: "512Mi"
-            limits:
-              cpu: "500m"
-              memory: "1Gi"
-          livenessProbe:
-            httpGet:
-              path: /misc/ping
-              port: 80
-            initialDelaySeconds: 120
-            periodSeconds: 30
-            timeoutSeconds: 10
-            failureThreshold: 3
-          readinessProbe:
-            httpGet:
-              path: /misc/ping
-              port: 80
-            initialDelaySeconds: 60
-            periodSeconds: 10
-            timeoutSeconds: 5
-            failureThreshold: 3
-          volumeMounts:
-            - name: pgadmin-data
-              mountPath: /var/lib/pgadmin
-            - name: pgadmin-servers
-              mountPath: /pgadmin4/servers.json
-              subPath: servers.json
-      volumes:
-        - name: pgadmin-data
-          persistentVolumeClaim:
-            claimName: pgadmin-storage
-        - name: pgadmin-servers
-          configMap:
-            name: pgadmin-servers
+      - name: pgadmin
+        image: dpage/pgadmin4:latest
+        env:
+        - name: PGADMIN_DEFAULT_EMAIL
+          value: "admin@example.com"
+        - name: PGADMIN_DEFAULT_PASSWORD
+          value: "adminpassword"
+        ports:
+        - containerPort: 80
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "128Mi"
+          limits:
+            cpu: "250m"
+            memory: "256Mi"
+        livenessProbe:
+          httpGet:
+            path: /login
+            port: 80
+          initialDelaySeconds: 30
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /login
+            port: 80
+          initialDelaySeconds: 5
+          periodSeconds: 10
 ---
 apiVersion: v1
 kind: Service
@@ -1338,22 +1279,6 @@ spec:
   selector:
     app: ${PROJECT}
     component: pgadmin
----
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: pgadmin-storage
-  namespace: ${NAMESPACE}
-  labels:
-    app: ${PROJECT}
-    app.kubernetes.io/name: ${PROJECT}
-    app.kubernetes.io/instance: ${PROJECT}
-spec:
-  accessModes:
-  - ReadWriteOnce
-  resources:
-    requests:
-      storage: 2Gi
 YAML
 
  # vault - UPDATED with consistent labels
@@ -1980,101 +1905,8 @@ data:
         scrape_interval: 30s
 YAML
 
- # postgres-exporter - UPDATED with consistent labels and config
+ # postgres-exporter - UPDATED with consistent labels
  cat > "${BASE_DIR}/postgres-exporter.yaml" <<YAML
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: postgres-exporter-config
-  namespace: ${NAMESPACE}
-  labels:
-    app: ${PROJECT}
-    app.kubernetes.io/name: ${PROJECT}
-    app.kubernetes.io/instance: ${PROJECT}
-data:
-  postgres_exporter.yml: |
-    # Postgres Exporter Configuration
-    # Connection settings will be provided via environment variables
-
-    # Default metrics collection
-    # See: https://github.com/prometheus-community/postgres_exporter
-
-    # Collect general statistics
-    pg_stat_database:
-      query: |
-        SELECT
-          datname,
-          numbackends,
-          xact_commit,
-          xact_rollback,
-          blks_read,
-          blks_hit,
-          tup_returned,
-          tup_fetched,
-          tup_inserted,
-          tup_updated,
-          tup_deleted,
-          conflicts,
-          temp_files,
-          temp_bytes,
-          deadlocks,
-          blk_read_time,
-          blk_write_time,
-          stats_reset
-        FROM pg_stat_database
-      metrics:
-        - datname:
-            usage: "LABEL"
-            description: "Database name"
-        - numbackends:
-            usage: "GAUGE"
-            description: "Number of backends currently connected to this database"
-        - xact_commit:
-            usage: "COUNTER"
-            description: "Number of transactions committed"
-        - xact_rollback:
-            usage: "COUNTER"
-            description: "Number of transactions rolled back"
-        - blks_read:
-            usage: "COUNTER"
-            description: "Number of disk blocks read"
-        - blks_hit:
-            usage: "COUNTER"
-            description: "Number of buffer hits"
-        - tup_returned:
-            usage: "COUNTER"
-            description: "Number of rows returned"
-        - tup_fetched:
-            usage: "COUNTER"
-            description: "Number of rows fetched"
-        - tup_inserted:
-            usage: "COUNTER"
-            description: "Number of rows inserted"
-        - tup_updated:
-            usage: "COUNTER"
-            description: "Number of rows updated"
-        - tup_deleted:
-            usage: "COUNTER"
-            description: "Number of rows deleted"
-        - conflicts:
-            usage: "COUNTER"
-            description: "Number of queries canceled due to conflicts"
-        - temp_files:
-            usage: "COUNTER"
-            description: "Number of temporary files created"
-        - temp_bytes:
-            usage: "COUNTER"
-            description: "Total amount of data written to temporary files"
-        - deadlocks:
-            usage: "COUNTER"
-            description: "Number of deadlocks detected"
-        - blk_read_time:
-            usage: "COUNTER"
-            description: "Time spent reading data file blocks by backends"
-        - blk_write_time:
-            usage: "COUNTER"
-            description: "Time spent writing data file blocks by backends"
----
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -2109,11 +1941,6 @@ spec:
         env:
         - name: DATA_SOURCE_NAME
           value: "postgresql://webuser:testpassword@postgres-db:5432/webdb?sslmode=disable"
-        - name: PG_EXPORTER_EXTEND_QUERY_PATH
-          value: "/config/postgres_exporter.yml"
-        volumeMounts:
-        - name: config
-          mountPath: /config
         resources:
           requests:
             cpu: "100m"
@@ -2133,10 +1960,6 @@ spec:
             port: 9187
           initialDelaySeconds: 5
           periodSeconds: 5
-      volumes:
-      - name: config
-        configMap:
-          name: postgres-exporter-config
 ---
 apiVersion: v1
 kind: Service

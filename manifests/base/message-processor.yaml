@@ -25,42 +25,42 @@ spec:
         app.kubernetes.io/component: worker
     spec:
       containers:
-        - name: worker
-          image: ghcr.io/exea-centrum/website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui:latest
-          command: ["python", "worker.py"]
-          env:
-            - name: REDIS_HOST
-              value: "redis"
-            - name: REDIS_PORT
-              value: "6379"
-            - name: REDIS_LIST
-              value: "outgoing_messages"
-            - name: KAFKA_BOOTSTRAP_SERVERS
-              value: "kafka:9092"
-            - name: KAFKA_TOPIC
-              value: "survey-topic"
-            - name: DATABASE_URL
-              value: "dbname=webdb user=webuser password=testpassword host=postgres-db port=5432"
-          resources:
-            requests:
-              cpu: "200m"
-              memory: "256Mi"
-            limits:
-              cpu: "500m"
-              memory: "512Mi"
-          livenessProbe:
-            exec:
-              command:
-                - sh
-                - -c
-                - 'python -c "import redis; redis.Redis(host=\"redis\", port=6379, socket_connect_timeout=5).ping()"'
-            initialDelaySeconds: 60
-            periodSeconds: 30
-          readinessProbe:
-            exec:
-              command:
-                - sh
-                - -c
-                - 'python -c "import redis; redis.Redis(host=\"redis\", port=6379, socket_connect_timeout=5).ping()"'
-            initialDelaySeconds: 30
-            periodSeconds: 10
+      - name: worker
+        image: ghcr.io/exea-centrum/website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui:latest
+        command: ["python", "worker.py"]
+        env:
+        - name: REDIS_HOST
+          value: "redis"
+        - name: REDIS_PORT
+          value: "6379"
+        - name: REDIS_LIST
+          value: "outgoing_messages"
+        - name: KAFKA_BOOTSTRAP_SERVERS
+          value: "kafka:9092"
+        - name: KAFKA_TOPIC
+          value: "survey-topic"
+        - name: DATABASE_URL
+          value: "dbname=webdb user=webuser password=testpassword host=postgres-db port=5432"
+        resources:
+          requests:
+            cpu: "200m"
+            memory: "256Mi"
+          limits:
+            cpu: "500m"
+            memory: "512Mi"
+        livenessProbe:
+          exec:
+            command:
+              - sh
+              - -c
+              - 'python -c "import redis; redis.Redis(host=\"redis\", port=6379, socket_connect_timeout=5).ping()"'
+          initialDelaySeconds: 60
+          periodSeconds: 30
+        readinessProbe:
+          exec:
+            command:
+              - sh
+              - -c
+              - 'python -c "import redis; redis.Redis(host=\"redis\", port=6379, socket_connect_timeout=5).ping()"'
+          initialDelaySeconds: 30
+          periodSeconds: 10

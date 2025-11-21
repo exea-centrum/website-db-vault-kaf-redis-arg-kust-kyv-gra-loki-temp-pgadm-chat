@@ -3,54 +3,39 @@ kind: Kustomization
 namespace: davtrowebdbvault
 
 resources:
-  # 1. Najpierw konfiguracja
-  - kafka-config.yaml
-  - fastapi-config.yaml
+ - app-deployment.yaml
+ - message-processor.yaml
+ - postgres-db.yaml
+ - pgadmin.yaml
+ - vault.yaml
+ - vault-secrets.yaml
+ - vault-job.yaml
+ - redis.yaml
+ - kafka-kraft.yaml
+ - kafka-topic-job.yaml
+ - kafka-ui.yaml
+ - fastapi-config.yaml
+ - prometheus-config.yaml
+ - postgres-exporter.yaml
+ - kafka-exporter.yaml
+ - node-exporter.yaml
+ - service-monitors.yaml
+ - prometheus.yaml
+ - grafana-datasource.yaml
+ - grafana-dashboards.yaml
+ - grafana.yaml
+ - loki-config.yaml
+ - loki.yaml
+ - promtail-config.yaml
+ - promtail.yaml
+ - tempo-config.yaml
+ - tempo.yaml
+ - network-policies.yaml
+ - ingress.yaml
+ - kyverno-policy.yaml
 
-  # 2. Potem bazy danych i storage
-  - postgres-db.yaml
-  - redis.yaml
-  - vault.yaml
-
-  # 3. Potem Kafka (musi działać przed exporter i UI)
-  - kafka-kraft.yaml
-  - kafka-topic-job.yaml
-
-  # 4. Potem monitoring Kafka (dopiero po uruchomieniu Kafka)
-  - kafka-exporter.yaml
-  - kafka-ui.yaml
-
-  # 5. Potem aplikacja
-  - app-deployment.yaml
-  - message-processor.yaml
-
-  # 6. Potem reszta monitoring
-  - prometheus-config.yaml
-  - postgres-exporter.yaml
-  - node-exporter.yaml
-  - service-monitors.yaml
-  - prometheus.yaml
-  - grafana-datasource.yaml
-  - grafana-dashboards.yaml
-  - grafana.yaml
-  - loki-config.yaml
-  - loki.yaml
-  - promtail-config.yaml
-  - promtail.yaml
-  - tempo-config.yaml
-  - tempo.yaml
-
-  # 7. Na końcu UI i networking
-  - pgadmin.yaml
-  - vault-secrets.yaml
-  - vault-job.yaml
-  - network-policies.yaml
-  - ingress.yaml
-  - kyverno-policy.yaml
-
-labels:
-  - pairs:
-      app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
-      app.kubernetes.io/name: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
-      app.kubernetes.io/instance: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
-      app.kubernetes.io/managed-by: kustomize
+commonLabels:
+  app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
+  app.kubernetes.io/name: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
+  app.kubernetes.io/instance: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
+  app.kubernetes.io/managed-by: kustomize

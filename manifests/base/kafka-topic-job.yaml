@@ -20,33 +20,22 @@ spec:
         app.kubernetes.io/component: kafka-topic-job
     spec:
       containers:
-        - name: create-topics
-          image: apache/kafka:4.1.0
-          command:
-            - /bin/sh
-            - -c
-            - |
-              # Wait for Kafka to be ready
-              echo "Waiting for Kafka to be ready..."
-              until nc -z kafka 9092; do
-                echo "Waiting for Kafka..."
-                sleep 10
-              done
-
-              echo "Kafka is ready, creating topics..."
-
-              # Create survey topic
-              /opt/kafka/bin/kafka-topics.sh --create \
-                --bootstrap-server kafka:9092 \
-                --topic survey-topic \
-                --partitions 3 \
-                --replication-factor 1 \
-                --config retention.ms=604800000 \
-                --if-not-exists
-
-              echo "Kafka topics created successfully"
-
-              # List topics to verify
-              /opt/kafka/bin/kafka-topics.sh --list --bootstrap-server kafka:9092
+      - name: create-topics
+        image: bitnami/kafka:3.7
+        command:
+        - /bin/sh
+        - -c
+        - |
+          # Wait for Kafka to be ready
+          echo "Waiting for Kafka to be ready..."
+          until nc -z kafka 9092; do
+            echo "Waiting for Kafka..."
+            sleep 5
+          done
+          
+          # Create survey topic
+          /opt/bitnami/kafka/bin/kafka-topics.sh --create             --bootstrap-server kafka:9092             --topic survey-topic             --partitions 3             --replication-factor 1             --config retention.ms=604800000             --if-not-exists
+          
+          echo "Kafka topics created successfully"
       restartPolicy: OnFailure
-  backoffLimit: 5
+  backoffLimit: 3

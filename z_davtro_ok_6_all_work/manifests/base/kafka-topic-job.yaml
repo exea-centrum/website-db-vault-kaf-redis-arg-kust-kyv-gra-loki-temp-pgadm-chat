@@ -1,0 +1,52 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: create-kafka-topics
+  namespace: davtrowebdbvault
+  labels:
+    app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
+    component: kafka-topic-job
+    app.kubernetes.io/name: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
+    app.kubernetes.io/instance: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
+    app.kubernetes.io/component: kafka-topic-job
+spec:
+  template:
+    metadata:
+      labels:
+        app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
+        component: kafka-topic-job
+        app.kubernetes.io/name: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
+        app.kubernetes.io/instance: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
+        app.kubernetes.io/component: kafka-topic-job
+    spec:
+      containers:
+        - name: create-topics
+          image: apache/kafka:4.1.0
+          command:
+            - /bin/sh
+            - -c
+            - |
+              # Wait for Kafka to be ready
+              echo "Waiting for Kafka to be ready..."
+              until nc -z kafka 9092; do
+                echo "Waiting for Kafka..."
+                sleep 10
+              done
+
+              echo "Kafka is ready, creating topics..."
+
+              # Create survey topic
+              /opt/kafka/bin/kafka-topics.sh --create \
+                --bootstrap-server kafka:9092 \
+                --topic survey-topic \
+                --partitions 3 \
+                --replication-factor 1 \
+                --config retention.ms=604800000 \
+                --if-not-exists
+
+              echo "Kafka topics created successfully"
+
+              # List topics to verify
+              /opt/kafka/bin/kafka-topics.sh --list --bootstrap-server kafka:9092
+      restartPolicy: OnFailure
+  backoffLimit: 5
