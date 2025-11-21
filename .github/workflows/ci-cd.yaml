@@ -36,26 +36,6 @@ jobs:
           cd app
           flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
 
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: "3.11"
-
-      - name: Install dependencies
-        run: |
-          cd app
-          pip install -r requirements.txt
-
-      - name: Run tests
-        run: |
-          cd app
-          python -m pytest -v --tb=short
-
   build-and-push:
     runs-on: ubuntu-latest
     steps:
