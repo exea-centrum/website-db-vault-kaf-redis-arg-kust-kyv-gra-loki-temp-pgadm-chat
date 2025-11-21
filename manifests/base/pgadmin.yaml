@@ -77,8 +77,6 @@ spec:
               value: "False"
             - name: PGADMIN_CONFIG_UPGRADE_CHECK_ENABLED
               value: "False"
-            - name: PGADMIN_CONFIG_CONSOLE_LOG_LEVEL
-              value: "10"
           ports:
             - containerPort: 80
               name: http

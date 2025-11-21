@@ -24,6 +24,36 @@ spec:
         app.kubernetes.io/instance: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
         app.kubernetes.io/component: worker
     spec:
+      initContainers:
+        - name: wait-for-postgres
+          image: postgres:13
+          command:
+            [
+              "sh",
+              "-c",
+              'until pg_isready -h postgres-db -p 5432 -U webuser; do echo "waiting for postgres..."; sleep 10; done; echo "postgres ready"',
+            ]
+          env:
+            - name: PGPASSWORD
+              value: "testpassword"
+            - name: PGUSER
+              value: "webuser"
+        - name: wait-for-redis
+          image: busybox:1.35
+          command:
+            [
+              "sh",
+              "-c",
+              'until nc -z redis 6379; do echo "waiting for redis..."; sleep 10; done; echo "redis ready"',
+            ]
+        - name: wait-for-kafka
+          image: busybox:1.35
+          command:
+            [
+              "sh",
+              "-c",
+              'until nc -z kafka 9092; do echo "waiting for kafka..."; sleep 10; done; echo "kafka ready"',
+            ]
       containers:
       - name: worker
         image: ghcr.io/exea-centrum/website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui:latest

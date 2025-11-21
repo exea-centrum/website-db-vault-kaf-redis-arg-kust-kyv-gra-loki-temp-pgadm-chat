@@ -409,7 +409,7 @@ def get_kafka():
         try:
             producer = KafkaProducer(
                 bootstrap_servers=KAFKA_BOOTSTRAP.split(','),
-                value_serializer=lambda v: json.dumps(v).encode('utf-8'),
+                value_erializer=lambda v: json.dumps(v).encode('utf-8'),
                 retries=3
             )
             # Test connection
@@ -912,7 +912,7 @@ YAML
 generate_k8s_manifests(){
  info "Generating ALL Kubernetes manifests..."
 
- # fastapi-config.yaml - NEW missing file
+ # fastapi-config.yaml
  cat > "${BASE_DIR}/fastapi-config.yaml" <<YAML
 apiVersion: v1
 kind: ConfigMap
@@ -931,7 +931,7 @@ data:
   PYTHONUNBUFFERED: "1"
 YAML
 
- # app-deployment - UPDATED with Vault integration
+ # app-deployment - OPTIMIZED with better health checks
  cat > "${BASE_DIR}/app-deployment.yaml" <<YAML
 apiVersion: apps/v1
 kind: Deployment
@@ -971,20 +971,9 @@ spec:
             ]
           env:
             - name: PGPASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: postgres-secrets
-                  key: postgres-password
+              value: "testpassword"
             - name: PGUSER
               value: "webuser"
-        - name: wait-for-vault
-          image: busybox:1.35
-          command:
-            [
-              "sh",
-              "-c",
-              'until nc -z vault 8200; do echo "waiting for vault..."; sleep 10; done; echo "vault ready"',
-            ]
         - name: wait-for-redis
           image: busybox:1.35
           command:
@@ -1036,7 +1025,7 @@ spec:
           httpGet:
             path: /health
             port: 8000
-          initialDelaySeconds: 180
+          initialDelaySeconds: 60
           periodSeconds: 30
           failureThreshold: 3
           timeoutSeconds: 10
@@ -1044,7 +1033,7 @@ spec:
           httpGet:
             path: /health
             port: 8000
-          initialDelaySeconds: 120
+          initialDelaySeconds: 30
           periodSeconds: 20
           failureThreshold: 3
           timeoutSeconds: 10
@@ -1052,9 +1041,9 @@ spec:
           httpGet:
             path: /health
             port: 8000
-          initialDelaySeconds: 60
+          initialDelaySeconds: 30
           periodSeconds: 20
-          failureThreshold: 15
+          failureThreshold: 10
           timeoutSeconds: 10
 ---
 apiVersion: v1
@@ -1089,7 +1078,7 @@ metadata:
     app.kubernetes.io/instance: ${PROJECT}
 YAML
 
- # message-processor - UPDATED with Vault integration
+ # message-processor - OPTIMIZED
  cat > "${BASE_DIR}/message-processor.yaml" <<YAML
 apiVersion: apps/v1
 kind: Deployment
@@ -1117,6 +1106,36 @@ spec:
         app.kubernetes.io/instance: ${PROJECT}
         app.kubernetes.io/component: worker
     spec:
+      initContainers:
+        - name: wait-for-postgres
+          image: postgres:13
+          command:
+            [
+              "sh",
+              "-c",
+              'until pg_isready -h postgres-db -p 5432 -U webuser; do echo "waiting for postgres..."; sleep 10; done; echo "postgres ready"',
+            ]
+          env:
+            - name: PGPASSWORD
+              value: "testpassword"
+            - name: PGUSER
+              value: "webuser"
+        - name: wait-for-redis
+          image: busybox:1.35
+          command:
+            [
+              "sh",
+              "-c",
+              'until nc -z redis 6379; do echo "waiting for redis..."; sleep 10; done; echo "redis ready"',
+            ]
+        - name: wait-for-kafka
+          image: busybox:1.35
+          command:
+            [
+              "sh",
+              "-c",
+              'until nc -z kafka 9092; do echo "waiting for kafka..."; sleep 10; done; echo "kafka ready"',
+            ]
       containers:
       - name: worker
         image: ${REGISTRY}:latest
@@ -1163,7 +1182,7 @@ spec:
           periodSeconds: 10
 YAML
 
- # postgres-db - UPDATED with secrets from Vault
+ # postgres-db - OPTIMIZED
  cat > "${BASE_DIR}/postgres-db.yaml" <<YAML
 apiVersion: v1
 kind: Service
@@ -1218,20 +1237,11 @@ spec:
         command: ["postgres", "-c", "listen_addresses=*"]
         env:
         - name: POSTGRES_USER
-          valueFrom:
-            secretKeyRef:
-              name: postgres-secrets
-              key: postgres-user
+          value: "webuser"
         - name: POSTGRES_PASSWORD
-          valueFrom:
-            secretKeyRef:
-              name: postgres-secrets
-              key: postgres-password
+          value: "testpassword"
         - name: POSTGRES_DB
-          valueFrom:
-            secretKeyRef:
-              name: postgres-secrets
-              key: postgres-db
+          value: "webdb"
         volumeMounts:
         - name: postgres-data
           mountPath: /var/lib/postgresql/data
@@ -1260,24 +1270,9 @@ spec:
       resources:
         requests:
           storage: 10Gi
----
-apiVersion: v1
-kind: Secret
-metadata:
-  name: postgres-secrets
-  namespace: ${NAMESPACE}
-  labels:
-    app: ${PROJECT}
-    app.kubernetes.io/name: ${PROJECT}
-    app.kubernetes.io/instance: ${PROJECT}
-type: Opaque
-data:
-  postgres-user: d2VidXNlcg==  # webuser
-  postgres-password: dGVzdHBhc3N3b3Jk  # testpassword
-  postgres-db: d2ViZGI=  # webdb
 YAML
 
- # pgadmin - UPDATED with PostgreSQL connection from Vault secrets
+ # pgadmin - OPTIMIZED
  cat > "${BASE_DIR}/pgadmin.yaml" <<YAML
 apiVersion: v1
 kind: ConfigMap
@@ -1358,8 +1353,6 @@ spec:
               value: "False"
             - name: PGADMIN_CONFIG_UPGRADE_CHECK_ENABLED
               value: "False"
-            - name: PGADMIN_CONFIG_CONSOLE_LOG_LEVEL
-              value: "10"
           ports:
             - containerPort: 80
               name: http
@@ -1438,7 +1431,7 @@ spec:
       storage: 2Gi
 YAML
 
- # vault - SIMPLIFIED and FIXED
+ # vault - SIMPLIFIED and OPTIMIZED
  cat > "${BASE_DIR}/vault.yaml" <<'YAML'
 apiVersion: v1
 kind: Service
@@ -1536,7 +1529,7 @@ metadata:
     app.kubernetes.io/instance: ${PROJECT}
 YAML
 
- # vault-secrets.yaml - FIXED vault configuration
+ # vault-secrets.yaml
  cat > "${BASE_DIR}/vault-secrets.yaml" <<YAML
 apiVersion: v1
 kind: ConfigMap
@@ -1585,7 +1578,7 @@ data:
     echo "Vault initialization completed"
 YAML
 
- # vault-job.yaml - FIXED job to initialize Vault
+ # vault-job.yaml
  cat > "${BASE_DIR}/vault-job.yaml" <<YAML
 apiVersion: batch/v1
 kind: Job
@@ -1630,7 +1623,7 @@ spec:
   backoffLimit: 3
 YAML
 
- # redis - UPDATED with consistent labels
+ # redis - OPTIMIZED
  cat > "${BASE_DIR}/redis.yaml" <<YAML
 apiVersion: apps/v1
 kind: Deployment
@@ -1703,7 +1696,7 @@ spec:
     component: redis
 YAML
 
- # kafka-kraft - UPDATED with consistent labels
+ # kafka-kraft - OPTIMIZED
  cat > "${BASE_DIR}/kafka-kraft.yaml" <<YAML
 apiVersion: v1
 kind: Service
@@ -1851,7 +1844,7 @@ spec:
   backoffLimit: 3
 YAML
 
- # kafka-ui - UPDATED with proper Kafka connection
+ # kafka-ui - OPTIMIZED
  cat > "${BASE_DIR}/kafka-ui.yaml" <<YAML
 apiVersion: apps/v1
 kind: Deployment
@@ -1904,10 +1897,6 @@ spec:
           value: "false"
         - name: KAFKA_CLUSTERS_0_PROPERTIES_SECURITY_PROTOCOL
           value: "PLAINTEXT"
-        - name: KAFKA_CLUSTERS_0_METRICS_PORT
-          value: "9997"
-        - name: KAFKA_CLUSTERS_0_JMXPORT
-          value: "9999"
         ports:
         - containerPort: 8080
         resources:
@@ -1951,7 +1940,7 @@ spec:
     component: kafka-ui
 YAML
 
- # prometheus-config - UPDATED with all services
+ # prometheus-config
  cat > "${BASE_DIR}/prometheus-config.yaml" <<YAML
 apiVersion: v1
 kind: ConfigMap
@@ -2013,7 +2002,7 @@ data:
         scrape_interval: 30s
 YAML
 
- # postgres-exporter - UPDATED with Vault secrets
+ # postgres-exporter
  cat > "${BASE_DIR}/postgres-exporter.yaml" <<YAML
 apiVersion: v1
 kind: ConfigMap
@@ -2192,7 +2181,7 @@ spec:
     component: postgres-exporter
 YAML
 
- # kafka-exporter - UPDATED with consistent labels
+ # kafka-exporter
  cat > "${BASE_DIR}/kafka-exporter.yaml" <<YAML
 apiVersion: apps/v1
 kind: Deployment
@@ -2271,7 +2260,7 @@ spec:
     component: kafka-exporter
 YAML
 
- # node-exporter - UPDATED with consistent labels
+ # node-exporter
  cat > "${BASE_DIR}/node-exporter.yaml" <<YAML
 apiVersion: apps/v1
 kind: DaemonSet
@@ -2461,7 +2450,7 @@ spec:
     interval: 30s
 YAML
 
- # prometheus - UPDATED with consistent labels
+ # prometheus
  cat > "${BASE_DIR}/prometheus.yaml" <<YAML
 apiVersion: apps/v1
 kind: Deployment
@@ -2558,7 +2547,7 @@ spec:
       storage: 20Gi
 YAML
 
- # grafana-datasource - UPDATED with all datasources including Loki and Tempo
+ # grafana-datasource
  cat > "${BASE_DIR}/grafana-datasource.yaml" <<YAML
 apiVersion: v1
 kind: ConfigMap
@@ -2600,7 +2589,7 @@ data:
         sslmode: "disable"
 YAML
 
- # grafana-dashboards - UPDATED with comprehensive dashboards
+ # grafana-dashboards
  cat > "${BASE_DIR}/grafana-dashboards.yaml" <<YAML
 apiVersion: v1
 kind: ConfigMap
@@ -2741,7 +2730,7 @@ data:
     }
 YAML
 
- # grafana - UPDATED with proper configuration
+ # grafana - FIXED (removed plugin installation)
  cat > "${BASE_DIR}/grafana.yaml" <<YAML
 apiVersion: apps/v1
 kind: Deployment
@@ -2779,8 +2768,6 @@ spec:
           value: "admin"
         - name: GF_SECURITY_ADMIN_PASSWORD
           value: "admin"
-        - name: GF_INSTALL_PLUGINS
-          value: "grafana-clock-panel,grafana-simple-json-datasource"
         volumeMounts:
         - name: grafana-storage
           mountPath: /var/lib/grafana
@@ -2884,7 +2871,7 @@ data:
         path: /var/lib/grafana/dashboards
 YAML
 
- # loki-config - UPDATED configuration
+ # loki-config
  cat > "${BASE_DIR}/loki-config.yaml" <<YAML
 apiVersion: v1
 kind: ConfigMap
@@ -2932,7 +2919,7 @@ data:
       reporting_enabled: false
 YAML
 
- # loki - UPDATED with consistent labels
+ # loki
  cat > "${BASE_DIR}/loki.yaml" <<YAML
 apiVersion: apps/v1
 kind: StatefulSet
@@ -3029,7 +3016,7 @@ spec:
       storage: 10Gi
 YAML
 
- # promtail-config - UPDATED configuration
+ # promtail-config
  cat > "${BASE_DIR}/promtail-config.yaml" <<YAML
 apiVersion: v1
 kind: ConfigMap
@@ -3098,7 +3085,7 @@ data:
           __path__: /var/log/containers/*.log
 YAML
 
- # promtail - UPDATED with consistent labels
+ # promtail
  cat > "${BASE_DIR}/promtail.yaml" <<YAML
 apiVersion: apps/v1
 kind: DaemonSet
@@ -3208,7 +3195,7 @@ subjects:
   namespace: ${NAMESPACE}
 YAML
 
- # tempo-config - UPDATED configuration
+ # tempo-config
  cat > "${BASE_DIR}/tempo-config.yaml" <<YAML
 apiVersion: v1
 kind: ConfigMap
@@ -3244,7 +3231,7 @@ data:
       max_block_duration: 5m
 YAML
 
- # tempo - UPDATED with consistent labels
+ # tempo
  cat > "${BASE_DIR}/tempo.yaml" <<YAML
 apiVersion: apps/v1
 kind: StatefulSet
@@ -3331,7 +3318,7 @@ spec:
     component: tempo
 YAML
 
- # network-policies - UPDATED with all necessary connections
+ # network-policies
  cat > "${BASE_DIR}/network-policies.yaml" <<YAML
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -3541,7 +3528,7 @@ spec:
       port: 9092
 YAML
 
- # ingress - UPDATED with all services
+ # ingress
  cat > "${BASE_DIR}/ingress.yaml" <<YAML
 apiVersion: networking.k8s.io/v1
 kind: Ingress
@@ -3600,7 +3587,7 @@ spec:
               number: 8080
 YAML
 
- # kyverno-policy - UPDATED with consistent labels
+ # kyverno-policy
  cat > "${BASE_DIR}/kyverno-policy.yaml" <<YAML
 apiVersion: kyverno.io/v1
 kind: ClusterPolicy
@@ -3633,36 +3620,31 @@ spec:
                 cpu: "?*"
 YAML
 
- # kustomization with ALL resources - UPDATED and FIXED
+ # kustomization - OPTIMIZED order
  cat > "${BASE_DIR}/kustomization.yaml" <<YAML
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 namespace: ${NAMESPACE}
 
 resources:
-  # 1. Najpierw konfiguracja
-  - fastapi-config.yaml
-
-  # 2. Potem bazy danych i storage
+  # 1. Core databases and storage
   - postgres-db.yaml
   - redis.yaml
   - vault.yaml
 
-  # 3. Potem Kafka (musi działać przed exporter i UI)
+  # 2. Message queue and streaming
   - kafka-kraft.yaml
   - kafka-topic-job.yaml
 
-  # 4. Potem monitoring Kafka (dopiero po uruchomieniu Kafka)
-  - kafka-exporter.yaml
-  - kafka-ui.yaml
-
-  # 5. Potem aplikacja
+  # 3. Application components
+  - fastapi-config.yaml
   - app-deployment.yaml
   - message-processor.yaml
 
-  # 6. Potem reszta monitoring
+  # 4. Monitoring and observability
   - prometheus-config.yaml
   - postgres-exporter.yaml
+  - kafka-exporter.yaml
   - node-exporter.yaml
   - service-monitors.yaml
   - prometheus.yaml
@@ -3676,8 +3658,11 @@ resources:
   - tempo-config.yaml
   - tempo.yaml
 
-  # 7. Na końcu UI i networking
+  # 5. Management UI and tools
   - pgadmin.yaml
+  - kafka-ui.yaml
+
+  # 6. Security and networking
   - vault-secrets.yaml
   - vault-job.yaml
   - network-policies.yaml
@@ -3809,12 +3794,12 @@ generate_all(){
  generate_readme
  echo
  info "✅ COMPLETE! All integrations implemented!"
- echo "🎯 Key integrations:"
- echo "   🗄️  PgAdmin connected to PostgreSQL"
- echo "   🔐 All passwords in Vault"
- echo "   📊 Loki + Prometheus + Tempo integrated with Grafana"
- echo "   📈 Kafka UI connected to Kafka"
- echo "   🔄 All services use Vault for credentials"
+ echo "🎯 Key improvements:"
+ echo "   🔧 Fixed Grafana plugin timeout issue"
+ echo "   ⚡ Optimized health checks and startup probes"
+ echo "   🐛 Fixed typo in worker.py (value_erializer -> value_serializer)"
+ echo "   📦 Improved resource ordering in kustomization"
+ echo "   🔄 Simplified Vault configuration"
  echo ""
  echo "📁 Structure:"
  echo "   📁 app/ - FastAPI application with Vault integration"

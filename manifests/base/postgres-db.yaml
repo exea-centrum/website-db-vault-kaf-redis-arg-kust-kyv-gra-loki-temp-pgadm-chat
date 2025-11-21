@@ -51,20 +51,11 @@ spec:
         command: ["postgres", "-c", "listen_addresses=*"]
         env:
         - name: POSTGRES_USER
-          valueFrom:
-            secretKeyRef:
-              name: postgres-secrets
-              key: postgres-user
+          value: "webuser"
         - name: POSTGRES_PASSWORD
-          valueFrom:
-            secretKeyRef:
-              name: postgres-secrets
-              key: postgres-password
+          value: "testpassword"
         - name: POSTGRES_DB
-          valueFrom:
-            secretKeyRef:
-              name: postgres-secrets
-              key: postgres-db
+          value: "webdb"
         volumeMounts:
         - name: postgres-data
           mountPath: /var/lib/postgresql/data
@@ -93,18 +84,3 @@ spec:
       resources:
         requests:
           storage: 10Gi
----
-apiVersion: v1
-kind: Secret
-metadata:
-  name: postgres-secrets
-  namespace: davtrowebdbvault
-  labels:
-    app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
-    app.kubernetes.io/name: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
-    app.kubernetes.io/instance: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
-type: Opaque
-data:
-  postgres-user: d2VidXNlcg==  # webuser
-  postgres-password: dGVzdHBhc3N3b3Jk  # testpassword
-  postgres-db: d2ViZGI=  # webdb
