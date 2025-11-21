@@ -24,18 +24,6 @@ spec:
         app.kubernetes.io/instance: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
         app.kubernetes.io/component: worker
     spec:
-      initContainers:
-        - name: wait-for-services
-          image: busybox:1.35
-          command:
-            - "sh"
-            - "-c"
-            - |
-              echo "Waiting for services..."
-              until nc -z redis 6379; do echo "waiting for redis..."; sleep 5; done
-              until nc -z kafka 9092; do echo "waiting for kafka..."; sleep 5; done
-              until nc -z postgres-db 5432; do echo "waiting for postgres..."; sleep 5; done
-              echo "All services ready!"
       containers:
         - name: worker
           image: ghcr.io/exea-centrum/website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui:latest
