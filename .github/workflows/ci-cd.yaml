@@ -52,7 +52,7 @@ jobs:
       - name: Run tox
         # Run tox using the version of Python in `PATH`
         run: tox -e py
-        
+
   build-and-push:
     needs: [lint-and-format]
     runs-on: ubuntu-latest
