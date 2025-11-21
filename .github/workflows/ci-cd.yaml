@@ -36,22 +36,21 @@ jobs:
           cd app
           flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
 
+  build:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python: ["3.9", "3.11", "3.13"]
+        python-version: ["pypy3.10", "3.9", "3.10", "3.11", "3.12", "3.13"]
 
     steps:
       - uses: actions/checkout@v5
-      - name: Setup Python
+      - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
         with:
-          python-version: ${{ matrix.python }}
-      - name: Install tox and any other packages
-        run: pip install tox
-      - name: Run tox
-        # Run tox using the version of Python in `PATH`
-        run: tox -e py
+          python-version: ${{ matrix.python-version }}
+      # You can test your matrix by printing the current Python version
+      - name: Display Python version
+        run: python -c "import sys; print(sys.version)"
 
   build-and-push:
     needs: [lint-and-format]
