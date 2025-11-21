@@ -56,7 +56,6 @@ jobs:
           cd app
           python -m pytest -v --tb=short
 
-jobs:
   build-and-push:
     runs-on: ubuntu-latest
     steps:
