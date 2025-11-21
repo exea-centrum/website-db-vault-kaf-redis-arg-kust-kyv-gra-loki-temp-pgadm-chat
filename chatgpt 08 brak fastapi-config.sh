@@ -912,25 +912,6 @@ YAML
 generate_k8s_manifests(){
  info "Generating ALL Kubernetes manifests..."
 
- # fastapi-config.yaml - NEW missing file
- cat > "${BASE_DIR}/fastapi-config.yaml" <<YAML
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: fastapi-config
-  namespace: ${NAMESPACE}
-  labels:
-    app: ${PROJECT}
-    component: fastapi
-    app.kubernetes.io/name: ${PROJECT}
-    app.kubernetes.io/instance: ${PROJECT}
-    app.kubernetes.io/component: fastapi
-data:
-  APP_NAME: "${PROJECT}"
-  APP_ENV: "production"
-  PYTHONUNBUFFERED: "1"
-YAML
-
  # app-deployment - UPDATED with Vault integration
  cat > "${BASE_DIR}/app-deployment.yaml" <<YAML
 apiVersion: apps/v1
@@ -3668,7 +3649,7 @@ spec:
                 cpu: "?*"
 YAML
 
- # kustomization with ALL resources - UPDATED and FIXED
+ # kustomization with ALL resources - UPDATED
  cat > "${BASE_DIR}/kustomization.yaml" <<YAML
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
@@ -3719,12 +3700,11 @@ resources:
   - ingress.yaml
   - kyverno-policy.yaml
 
-labels:
-  - pairs:
-      app: ${PROJECT}
-      app.kubernetes.io/name: ${PROJECT}
-      app.kubernetes.io/instance: ${PROJECT}
-      app.kubernetes.io/managed-by: kustomize
+commonLabels:
+  app: ${PROJECT}
+  app.kubernetes.io/name: ${PROJECT}
+  app.kubernetes.io/instance: ${PROJECT}
+  app.kubernetes.io/managed-by: kustomize
 YAML
 
  # argocd application

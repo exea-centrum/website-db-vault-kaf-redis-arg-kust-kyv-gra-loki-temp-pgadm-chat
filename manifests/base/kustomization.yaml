@@ -47,8 +47,9 @@ resources:
   - ingress.yaml
   - kyverno-policy.yaml
 
-commonLabels:
-  app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
-  app.kubernetes.io/name: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
-  app.kubernetes.io/instance: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
-  app.kubernetes.io/managed-by: kustomize
+labels:
+  - pairs:
+      app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
+      app.kubernetes.io/name: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
+      app.kubernetes.io/instance: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
+      app.kubernetes.io/managed-by: kustomize
