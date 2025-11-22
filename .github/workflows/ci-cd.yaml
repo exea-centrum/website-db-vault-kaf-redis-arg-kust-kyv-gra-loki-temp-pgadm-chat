@@ -248,18 +248,3 @@ jobs:
             ghcr.io/exea-centrum/website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui:${{ github.sha }}
           cache-from: type=registry,ref=ghcr.io/exea-centrum/website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui:latest
           cache-to: type=inline
-
-  quality-gate:
-    runs-on: ubuntu-latest
-    needs: [code-quality, security-scan]
-    steps:
-      - name: Quality Gate Check
-        run: |
-          echo "## Quality Gate Results ✅" >> $GITHUB_STEP_SUMMARY
-          echo "### Passed Checks:" >> $GITHUB_STEP_SUMMARY
-          echo "✅ Code linting and formatting" >> $GITHUB_STEP_SUMMARY
-          echo "✅ Security scanning" >> $GITHUB_STEP_SUMMARY
-          echo "✅ Dependency checking" >> $GITHUB_STEP_SUMMARY
-          echo "✅ Test coverage" >> $GITHUB_STEP_SUMMARY
-          echo "✅ Container security" >> $GITHUB_STEP_SUMMARY
-          echo "**All quality checks passed!** 🚀" >> $GITHUB_STEP_SUMMARY
