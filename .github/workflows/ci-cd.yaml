@@ -24,8 +24,8 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.11'
-          cache: 'pip'
+          python-version: "3.11"
+          cache: "pip"
 
       - name: Install Python dependencies
         run: |
@@ -125,7 +125,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.11'
+          python-version: "3.11"
 
       - name: Install analysis tools
         run: pip install vulture interrogate dodgy
@@ -183,15 +183,15 @@ jobs:
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@master
         with:
-          scan-type: 'fs'
-          scan-ref: '.'
-          format: 'sarif'
-          output: 'trivy-results.sarif'
+          scan-type: "fs"
+          scan-ref: "."
+          format: "sarif"
+          output: "trivy-results.sarif"
 
       - name: Upload Trivy scan results
         uses: github/codeql-action/upload-sarif@v3
         with:
-          sarif_file: 'trivy-results.sarif'
+          sarif_file: "trivy-results.sarif"
 
   kubernetes-validation:
     runs-on: ubuntu-latest
@@ -214,7 +214,13 @@ jobs:
 
   build-and-push:
     runs-on: ubuntu-latest
-    needs: [code-quality, advanced-analysis, container-security, kubernetes-validation]
+    needs:
+      [
+        code-quality,
+        advanced-analysis,
+        container-security,
+        kubernetes-validation,
+      ]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -230,7 +236,7 @@ jobs:
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
-          password: ${{ secrets.GRC_PAT }}
+          password: ${{ secrets.GHCR_PAT }}
 
       - name: Build and push image
         uses: docker/build-push-action@v6
@@ -257,11 +263,3 @@ jobs:
           echo "✅ Test coverage" >> $GITHUB_STEP_SUMMARY
           echo "✅ Container security" >> $GITHUB_STEP_SUMMARY
           echo "**All quality checks passed!** 🚀" >> $GITHUB_STEP_SUMMARY
-
-  notifications:
-    runs-on: ubuntu-latest
-    needs: [build-and-push, security-scan]
-    if: always()
-    steps:
-      - name: Workflow status
-        run: echo "Workflow completed: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
