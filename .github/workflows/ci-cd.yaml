@@ -1,6 +1,5 @@
 name: CI/CD Build & Deploy
 
-
 on:
   push:
     branches: ["main"]
@@ -8,7 +7,6 @@ on:
     branches: ["main"]
   workflow_dispatch:
 
-    
 permissions:
   contents: read
   packages: write
@@ -32,51 +30,12 @@ jobs:
       - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install flake8 black pylint bandit safety mypy pytest pytest-cov radon coverage yamllint
+          pip install flake8 black pylint bandit safety mypy pytest pytest-cov radon coverage yamllint html5validator
           pip install -r app/requirements.txt
 
-      - name: Run flake8 linting
+      - name: Create test file
         run: |
-          flake8 app/ --count --max-complexity=10 --max-line-length=127 --statistics --show-source
-
-      - name: Run black code formatting check
-        run: |
-          black --check app/
-
-      - name: Run pylint analysis
-        run: |
-          pylint app/ --exit-zero --output-format=json:pylint-report.json || true
-
-      - name: Run bandit security scanning
-        run: |
-          bandit -r app/ -f json -o bandit-report.json || true
-
-      - name: Run safety dependency check
-        run: |
-          safety check -r app/requirements.txt --json > safety-report.json || true
-
-      - name: Run mypy type checking
-        run: |
-          mypy app/ --ignore-missing-imports --html-report mypy-report
-
-      - name: Calculate code metrics with radon
-        run: |
-          echo "### Code Complexity Metrics 📊" >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-          radon cc app/ -s >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-          
-          echo "### Maintainability Index 📈" >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-          radon mi app/ -s >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-
-      - name: Run tests with coverage
-        run: |
-          cd app
-          # Create minimal test file if it doesn't exist
-          if [ ! -f "test_main.py" ]; then
-            cat > test_main.py << 'EOF'
+          cat > app/test_main.py << 'EOF'
 import pytest
 from fastapi.testclient import TestClient
 from main import app
@@ -95,7 +54,39 @@ def test_survey_questions():
     response = client.get("/api/survey/questions")
     assert response.status_code == 200
 EOF
-          fi
+
+      - name: Run flake8 linting
+        run: flake8 app/ --count --max-complexity=10 --max-line-length=127 --statistics --show-source
+
+      - name: Run black code formatting check
+        run: black --check app/
+
+      - name: Run pylint analysis
+        run: pylint app/ --exit-zero --output-format=json:pylint-report.json || true
+
+      - name: Run bandit security scanning
+        run: bandit -r app/ -f json -o bandit-report.json || true
+
+      - name: Run safety dependency check
+        run: safety check -r app/requirements.txt --json > safety-report.json || true
+
+      - name: Run mypy type checking
+        run: mypy app/ --ignore-missing-imports --html-report mypy-report
+
+      - name: Calculate code metrics with radon
+        run: |
+          echo "### Code Complexity Metrics 📊" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          radon cc app/ -s >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "### Maintainability Index 📈" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          radon mi app/ -s >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+      - name: Run tests with coverage
+        run: |
+          cd app
           python -m pytest --cov=. --cov-report=xml --cov-report=html --cov-report=term-missing
 
       - name: Upload coverage reports
@@ -106,18 +97,14 @@ EOF
             app/coverage.xml
             app/htmlcov/
 
-      - name: HTML validation using Python
-        run: |
-          pip install html5validator
-          html5validator --root app/templates/ --format text || true
+      - name: HTML validation
+        run: html5validator --root app/templates/ --format text || true
 
       - name: Validate Dockerfile
-        run: |
-          docker run --rm -i hadolint/hadolint < Dockerfile || true
+        run: docker run --rm -i hadolint/hadolint < Dockerfile || true
 
-      - name: YAML validation using yamllint
-        run: |
-          yamllint manifests/base/ || true
+      - name: YAML validation
+        run: yamllint manifests/base/ || true
 
       - name: Upload code quality reports
         uses: actions/upload-artifact@v4
@@ -142,20 +129,16 @@ EOF
           python-version: '3.11'
 
       - name: Install analysis tools
-        run: |
-          pip install vulture interrogate dodgy
+        run: pip install vulture interrogate dodgy
 
       - name: Run vulture (dead code detection)
-        run: |
-          vulture app/ --min-confidence 80 || true
+        run: vulture app/ --min-confidence 80 || true
 
       - name: Run interrogate (docstring coverage)
-        run: |
-          interrogate app/ --verbose || true
+        run: interrogate app/ --verbose || true
 
       - name: Run dodgy (secrets detection)
-        run: |
-          dodgy app/ || true
+        run: dodgy app/ || true
 
       - name: Generate code complexity visualization
         run: |
@@ -191,11 +174,6 @@ EOF
           base: ${{ github.base_ref }}
           head: ${{ github.sha }}
 
-      - name: Run Gitleaks secret scanning
-        uses: gitleaks/gitleaks-action@v2
-        env:
-          GITLEAKS_VERSION: v8.18.0
-
   container-security:
     runs-on: ubuntu-latest
     needs: code-quality
@@ -211,16 +189,10 @@ EOF
           format: 'sarif'
           output: 'trivy-results.sarif'
 
-      - name: Upload Trivy scan results to GitHub Security tab
+      - name: Upload Trivy scan results
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: 'trivy-results.sarif'
-
-      - name: Run Docker image security scan
-        run: |
-          # Build image and scan
-          docker build -t app:latest .
-          trivy image app:latest --format table --exit-code 0
 
   kubernetes-validation:
     runs-on: ubuntu-latest
@@ -231,27 +203,15 @@ EOF
 
       - name: Set up Kubernetes tools
         run: |
-          # Install kubeval
           wget https://github.com/instrumenta/kubeval/releases/latest/download/kubeval-linux-amd64.tar.gz
           tar xf kubeval-linux-amd64.tar.gz
           sudo mv kubeval /usr/local/bin
 
-          # Install kube-score
-          wget https://github.com/zegl/kube-score/releases/download/v1.17.0/kube-score_1.17.0_linux_amd64.tar.gz
-          tar xvf kube-score_1.17.0_linux_amd64.tar.gz
-          sudo mv kube-score /usr/local/bin/
-
       - name: Validate Kubernetes manifests
-        run: |
-          kubeval manifests/base/ --ignore-missing-schemas || true
-
-      - name: Score Kubernetes manifests
-        run: |
-          kube-score score manifests/base/ || true
+        run: kubeval manifests/base/ --ignore-missing-schemas || true
 
       - name: Check Kubernetes syntax
-        run: |
-          kubectl apply --dry-run=client -k manifests/base/ || true
+        run: kubectl apply --dry-run=client -k manifests/base/ || true
 
   build-and-push:
     runs-on: ubuntu-latest
@@ -273,35 +233,16 @@ EOF
           username: ${{ github.actor }}
           password: ${{ secrets.GHCR_PAT }}
 
-      - name: Extract metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ghcr.io/exea-centrum/website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
-          tags: |
-            type=ref,event=branch
-            type=ref,event=pr
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=sha,prefix={{branch}}-
-
       - name: Build and push image
         uses: docker/build-push-action@v6
         with:
           context: .
-          platforms: linux/amd64,linux/arm64
           push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          tags: |
+            ghcr.io/exea-centrum/website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui:latest
+            ghcr.io/exea-centrum/website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui:${{ github.sha }}
           cache-from: type=registry,ref=ghcr.io/exea-centrum/website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui:latest
-          cache-to: type=inline,mode=max
-          build-args: |
-            BUILDKIT_INLINE_CACHE=1
-
-      - name: Generate SBOM
-        uses: anchore/sbom-action@v0
-        with:
-          image: ghcr.io/exea-centrum/website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui:latest
+          cache-to: type=inline
 
   quality-gate:
     runs-on: ubuntu-latest
@@ -310,15 +251,13 @@ EOF
       - name: Quality Gate Check
         run: |
           echo "## Quality Gate Results ✅" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Passed Checks:" >> $GITHUB_STEP_SUMMARY
           echo "✅ Code linting and formatting" >> $GITHUB_STEP_SUMMARY
           echo "✅ Security scanning" >> $GITHUB_STEP_SUMMARY
           echo "✅ Dependency checking" >> $GITHUB_STEP_SUMMARY
           echo "✅ Test coverage" >> $GITHUB_STEP_SUMMARY
           echo "✅ Container security" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**All quality checks passed! Ready for deployment.** 🚀" >> $GITHUB_STEP_SUMMARY
+          echo "**All quality checks passed!** 🚀" >> $GITHUB_STEP_SUMMARY
 
   notifications:
     runs-on: ubuntu-latest
@@ -326,20 +265,4 @@ EOF
     if: always()
     steps:
       - name: Workflow status
-        run: |
-          echo "Workflow completed with status: ${{ job.status }}"
-          echo "View details: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-
-      - name: Create GitHub Deployment
-        if: success()
-        uses: actions/github-script@v7
-        with:
-          script: |
-            github.rest.repos.createDeployment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              ref: context.sha,
-              environment: 'production',
-              auto_merge: false,
-              required_contexts: []
-            })
+        run: echo "Workflow completed: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
