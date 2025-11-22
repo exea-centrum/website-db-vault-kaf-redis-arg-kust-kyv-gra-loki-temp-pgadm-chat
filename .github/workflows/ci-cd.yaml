@@ -35,7 +35,7 @@ jobs:
 
       - name: Create test file
         run: |
-          cat > app/test_main.py << 'EOF'
+          cat > app/test_main.py << 'ENDOFFILE'
 import pytest
 from fastapi.testclient import TestClient
 from main import app
@@ -53,7 +53,7 @@ def test_home_page():
 def test_survey_questions():
     response = client.get("/api/survey/questions")
     assert response.status_code == 200
-EOF
+ENDOFFILE
 
       - name: Run flake8 linting
         run: flake8 app/ --count --max-complexity=10 --max-line-length=127 --statistics --show-source
