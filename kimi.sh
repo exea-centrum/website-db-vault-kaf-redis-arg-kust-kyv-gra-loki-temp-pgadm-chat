@@ -2991,9 +2991,11 @@ spec:
   ports:
   - port: 3100
     targetPort: 3100
+    name: http
     protocol: TCP
   - port: 9096
     targetPort: 9096
+    name: otlp-grpc
     protocol: TCP
   selector:
     app: ${PROJECT}

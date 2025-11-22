@@ -409,7 +409,7 @@ def get_kafka():
         try:
             producer = KafkaProducer(
                 bootstrap_servers=KAFKA_BOOTSTRAP.split(','),
-                value_serializer=lambda v: json.dumps(v).encode('utf-8'),
+                value_erializer=lambda v: json.dumps(v).encode('utf-8'),
                 retries=3
             )
             # Test connection
@@ -894,7 +894,7 @@ jobs:
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          password: ${{ secrets.GHCR_PAT }}
 
       - name: Build and push image
         uses: docker/build-push-action@v6
@@ -1432,7 +1432,7 @@ spec:
 YAML
 
  # vault - SIMPLIFIED and OPTIMIZED
- cat > "${BASE_DIR}/vault.yaml" <<YAML
+ cat > "${BASE_DIR}/vault.yaml" <<'YAML'
 apiVersion: v1
 kind: Service
 metadata:

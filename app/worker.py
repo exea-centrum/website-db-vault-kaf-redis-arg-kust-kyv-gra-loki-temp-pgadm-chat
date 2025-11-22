@@ -57,7 +57,7 @@ def get_kafka():
         try:
             producer = KafkaProducer(
                 bootstrap_servers=KAFKA_BOOTSTRAP.split(','),
-                value_erializer=lambda v: json.dumps(v).encode('utf-8'),
+                value_serializer=lambda v: json.dumps(v).encode('utf-8'),
                 retries=3
             )
             # Test connection
