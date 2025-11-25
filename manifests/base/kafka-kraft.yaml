@@ -14,6 +14,8 @@ spec:
   ports:
   - port: 9092
     name: client
+  - port: 9093
+    name: controller
   selector:
     app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
     component: kafka
@@ -47,7 +49,7 @@ spec:
     spec:
       containers:
       - name: kafka
-        image: bitnami/kafka:3.7
+        image: bitnami/kafka:3.6.1
         env:
         - name: BITNAMI_DEBUG
           value: "false"
@@ -60,7 +62,7 @@ spec:
         - name: KAFKA_CFG_LISTENERS
           value: "PLAINTEXT://:9092,CONTROLLER://:9093"
         - name: KAFKA_CFG_ADVERTISED_LISTENERS
-          value: "PLAINTEXT://kafka.davtrowebdbvault.svc.cluster.local:9092"
+          value: "PLAINTEXT://kafka-0.kafka.davtrowebdbvault.svc.cluster.local:9092"
         - name: KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP
           value: "CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT"
         - name: KAFKA_CFG_CONTROLLER_LISTENER_NAMES
@@ -71,9 +73,16 @@ spec:
           value: "true"
         - name: KAFKA_KRAFT_CLUSTER_ID
           value: "4mUj5vFk3tW7pY0iH2gR8qL6eD9oB1cZ"
+        - name: ALLOW_PLAINTEXT_LISTENER
+          value: "yes"
         ports:
         - containerPort: 9092
+          name: client
         - containerPort: 9093
+          name: controller
+        volumeMounts:
+        - name: kafka-data
+          mountPath: /bitnami/kafka
         resources:
           requests:
             cpu: "500m"
@@ -84,10 +93,29 @@ spec:
         readinessProbe:
           tcpSocket:
             port: 9092
-          initialDelaySeconds: 30
+          initialDelaySeconds: 60
           periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 6
         livenessProbe:
+          tcpSocket:
+            port: 9092
+          initialDelaySeconds: 90
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 6
+        startupProbe:
           tcpSocket:
             port: 9092
           initialDelaySeconds: 30
           periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 30
+  volumeClaimTemplates:
+  - metadata:
+      name: kafka-data
+    spec:
+      accessModes: ["ReadWriteOnce"]
+      resources:
+        requests:
+          storage: 10Gi

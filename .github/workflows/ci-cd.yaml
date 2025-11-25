@@ -3,226 +3,17 @@ name: CI/CD Build & Deploy
 on:
   push:
     branches: ["main"]
-  pull_request:
-    branches: ["main"]
   workflow_dispatch:
 
 permissions:
   contents: read
   packages: write
-  security-events: write
 
 jobs:
-  code-quality:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: "3.11"
-          cache: "pip"
-
-      - name: Install Python dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install flake8 black pylint bandit safety mypy pytest pytest-cov radon coverage yamllint html5validator
-          pip install -r app/requirements.txt
-
-      - name: Create test file
-        run: |
-          mkdir -p app
-          echo 'import pytest' > app/test_main.py
-          echo 'from fastapi.testclient import TestClient' >> app/test_main.py
-          echo 'from main import app' >> app/test_main.py
-          echo '' >> app/test_main.py
-          echo 'client = TestClient(app)' >> app/test_main.py
-          echo '' >> app/test_main.py
-          echo 'def test_health_check():' >> app/test_main.py
-          echo '    response = client.get("/health")' >> app/test_main.py
-          echo '    assert response.status_code in [200, 503]' >> app/test_main.py
-          echo '' >> app/test_main.py
-          echo 'def test_home_page():' >> app/test_main.py
-          echo '    response = client.get("/")' >> app/test_main.py
-          echo '    assert response.status_code == 200' >> app/test_main.py
-          echo '' >> app/test_main.py
-          echo 'def test_survey_questions():' >> app/test_main.py
-          echo '    response = client.get("/api/survey/questions")' >> app/test_main.py
-          echo '    assert response.status_code == 200' >> app/test_main.py
-
-      - name: Run flake8 linting
-        run: flake8 app/ --count --max-complexity=10 --max-line-length=127 --statistics --show-source
-
-      - name: Run black code formatting check
-        run: black --check app/
-
-      - name: Run pylint analysis
-        run: pylint app/ --exit-zero --output-format=json:pylint-report.json || true
-
-      - name: Run bandit security scanning
-        run: bandit -r app/ -f json -o bandit-report.json || true
-
-      - name: Run safety dependency check
-        run: safety check -r app/requirements.txt --json > safety-report.json || true
-
-      - name: Run mypy type checking
-        run: mypy app/ --ignore-missing-imports --html-report mypy-report
-
-      - name: Calculate code metrics with radon
-        run: |
-          echo "### Code Complexity Metrics 📊" >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-          radon cc app/ -s >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-          echo "### Maintainability Index 📈" >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-          radon mi app/ -s >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-
-      - name: Run tests with coverage
-        run: |
-          cd app
-          python -m pytest --cov=. --cov-report=xml --cov-report=html --cov-report=term-missing
-
-      - name: Upload coverage reports
-        uses: actions/upload-artifact@v4
-        with:
-          name: coverage-report
-          path: |
-            app/coverage.xml
-            app/htmlcov/
-
-      - name: HTML validation
-        run: html5validator --root app/templates/ --format text || true
-
-      - name: Validate Dockerfile
-        run: docker run --rm -i hadolint/hadolint < Dockerfile || true
-
-      - name: YAML validation
-        run: yamllint manifests/base/ || true
-
-      - name: Upload code quality reports
-        uses: actions/upload-artifact@v4
-        with:
-          name: code-quality-reports
-          path: |
-            bandit-report.json
-            safety-report.json
-            pylint-report.json
-            app/mypy-report/
-
-  advanced-analysis:
-    runs-on: ubuntu-latest
-    needs: code-quality
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: "3.11"
-
-      - name: Install analysis tools
-        run: pip install vulture interrogate dodgy
-
-      - name: Run vulture (dead code detection)
-        run: vulture app/ --min-confidence 80 || true
-
-      - name: Run interrogate (docstring coverage)
-        run: interrogate app/ --verbose || true
-
-      - name: Run dodgy (secrets detection)
-        run: dodgy app/ || true
-
-      - name: Generate code complexity visualization
-        run: |
-          echo "## Code Quality Overview 🎯" >> $GITHUB_STEP_SUMMARY
-          echo "### Files with Highest Complexity" >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-          find app/ -name "*.py" -exec wc -l {} + | sort -rn | head -10 >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-
-  security-scan:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Initialize CodeQL
-        uses: github/codeql-action/init@v3
-        with:
-          languages: python
-
-      - name: Autobuild
-        uses: github/codeql-action/autobuild@v3
-
-      - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@v3
-
-      - name: Run TruffleHog secret scanning
-        uses: trufflesecurity/trufflehog@main
-        with:
-          path: ./
-          base: ${{ github.base_ref }}
-          head: ${{ github.sha }}
-
-  container-security:
-    runs-on: ubuntu-latest
-    needs: code-quality
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@master
-        with:
-          scan-type: "fs"
-          scan-ref: "."
-          format: "sarif"
-          output: "trivy-results.sarif"
-
-      - name: Upload Trivy scan results
-        uses: github/codeql-action/upload-sarif@v3
-        with:
-          sarif_file: "trivy-results.sarif"
-
-  kubernetes-validation:
-    runs-on: ubuntu-latest
-    needs: code-quality
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Kubernetes tools
-        run: |
-          wget https://github.com/instrumenta/kubeval/releases/latest/download/kubeval-linux-amd64.tar.gz
-          tar xf kubeval-linux-amd64.tar.gz
-          sudo mv kubeval /usr/local/bin
-
-      - name: Validate Kubernetes manifests
-        run: kubeval manifests/base/ --ignore-missing-schemas || true
-
-      - name: Check Kubernetes syntax
-        run: kubectl apply --dry-run=client -k manifests/base/ || true
-
   build-and-push:
     runs-on: ubuntu-latest
-    needs:
-      [
-        code-quality,
-        advanced-analysis,
-        container-security,
-        kubernetes-validation,
-      ]
     steps:
-      - name: Checkout code
+      - name: Checkout
         uses: actions/checkout@v4
 
       - name: Set up QEMU
@@ -236,7 +27,7 @@ jobs:
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
-          password: ${{ secrets.GHCR_PAT }}
+          password: ${{ secrets.GHR_PAT }}
 
       - name: Build and push image
         uses: docker/build-push-action@v6

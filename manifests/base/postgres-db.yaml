@@ -48,7 +48,6 @@ spec:
       containers:
       - name: postgres
         image: postgres:15-alpine
-        command: ["postgres", "-c", "listen_addresses=*"]
         env:
         - name: POSTGRES_USER
           value: "webuser"
@@ -56,6 +55,10 @@ spec:
           value: "testpassword"
         - name: POSTGRES_DB
           value: "webdb"
+        - name: POSTGRES_HOST_AUTH_METHOD
+          value: "trust"
+        - name: PGDATA
+          value: "/var/lib/postgresql/data/pgdata"
         volumeMounts:
         - name: postgres-data
           mountPath: /var/lib/postgresql/data
@@ -69,13 +72,24 @@ spec:
         livenessProbe:
           exec:
             command: ["pg_isready", "-U", "webuser", "-d", "webdb"]
-          initialDelaySeconds: 30
+          initialDelaySeconds: 60
           periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 6
         readinessProbe:
           exec:
             command: ["pg_isready", "-U", "webuser", "-d", "webdb"]
-          initialDelaySeconds: 5
+          initialDelaySeconds: 30
           periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 5
+        startupProbe:
+          exec:
+            command: ["pg_isready", "-U", "webuser", "-d", "webdb"]
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 30
   volumeClaimTemplates:
   - metadata:
       name: postgres-data
