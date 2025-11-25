@@ -30,9 +30,7 @@ spec:
         image: grafana/loki:2.9.2
         ports:
         - containerPort: 3100
-          name: http
         - containerPort: 9096
-          name: grpc
         volumeMounts:
         - name: config
           mountPath: /etc/loki
@@ -70,11 +68,9 @@ spec:
   ports:
   - port: 3100
     targetPort: 3100
-    name: http
     protocol: TCP
   - port: 9096
     targetPort: 9096
-    name: grpc
     protocol: TCP
   selector:
     app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui

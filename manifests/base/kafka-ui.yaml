@@ -51,7 +51,6 @@ spec:
           value: "PLAINTEXT"
         ports:
         - containerPort: 8080
-          name: http
         resources:
           requests:
             cpu: "100m"
@@ -87,7 +86,6 @@ spec:
   ports:
   - port: 8080
     targetPort: 8080
-    name: http
     protocol: TCP
   selector:
     app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
