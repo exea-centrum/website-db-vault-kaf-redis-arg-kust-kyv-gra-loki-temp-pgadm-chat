@@ -57,6 +57,7 @@ spec:
       containers:
       - name: worker
         image: ghcr.io/exea-centrum/website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui:latest
+        imagePullPolicy: Always
         command: ["python", "worker.py"]
         env:
         - name: REDIS_HOST

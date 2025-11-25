@@ -29,11 +29,14 @@ spec:
         image: grafana/grafana:10.2.2
         ports:
         - containerPort: 3000
+          name: http
         env:
         - name: GF_SECURITY_ADMIN_USER
           value: "admin"
         - name: GF_SECURITY_ADMIN_PASSWORD
           value: "admin"
+        - name: GF_INSTALL_PLUGINS
+          value: ""
         volumeMounts:
         - name: grafana-storage
           mountPath: /var/lib/grafana
@@ -54,13 +57,13 @@ spec:
           httpGet:
             path: /api/health
             port: 3000
-          initialDelaySeconds: 30
+          initialDelaySeconds: 60
           periodSeconds: 10
         readinessProbe:
           httpGet:
             path: /api/health
             port: 3000
-          initialDelaySeconds: 5
+          initialDelaySeconds: 30
           periodSeconds: 10
       volumes:
       - name: grafana-storage
@@ -92,6 +95,7 @@ spec:
   ports:
   - port: 80
     targetPort: 3000
+    name: http
     protocol: TCP
   selector:
     app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui

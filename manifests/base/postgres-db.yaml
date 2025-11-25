@@ -45,6 +45,10 @@ spec:
         app.kubernetes.io/instance: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
         app.kubernetes.io/component: postgres
     spec:
+      securityContext:
+        fsGroup: 999
+        runAsUser: 999
+        runAsNonRoot: true
       containers:
       - name: postgres
         image: postgres:15-alpine
@@ -55,10 +59,11 @@ spec:
           value: "testpassword"
         - name: POSTGRES_DB
           value: "webdb"
-        - name: POSTGRES_HOST_AUTH_METHOD
-          value: "trust"
         - name: PGDATA
           value: "/var/lib/postgresql/data/pgdata"
+        ports:
+        - containerPort: 5432
+          name: postgres
         volumeMounts:
         - name: postgres-data
           mountPath: /var/lib/postgresql/data

@@ -53,6 +53,7 @@ spec:
         command: ["vault", "server", "-dev", "-dev-listen-address=0.0.0.0:8200", "-dev-root-token-id=root"]
         ports:
         - containerPort: 8200
+          name: http
         env:
         - name: VAULT_ADDR
           value: "http://127.0.0.1:8200"

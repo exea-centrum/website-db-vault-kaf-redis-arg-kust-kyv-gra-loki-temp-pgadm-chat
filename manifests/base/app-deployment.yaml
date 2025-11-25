@@ -58,6 +58,7 @@ spec:
       containers:
       - name: app
         image: ghcr.io/exea-centrum/website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui:latest
+        imagePullPolicy: Always
         ports:
         - containerPort: 8000
         env:

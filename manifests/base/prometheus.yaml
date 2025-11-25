@@ -29,6 +29,7 @@ spec:
         image: prom/prometheus:v2.48.0
         ports:
         - containerPort: 9090
+          name: http
         volumeMounts:
         - name: config
           mountPath: /etc/prometheus
@@ -71,6 +72,7 @@ spec:
   ports:
   - port: 9090
     targetPort: 9090
+    name: http
     protocol: TCP
   selector:
     app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui

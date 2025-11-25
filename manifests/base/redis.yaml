@@ -30,6 +30,7 @@ spec:
         command: ["redis-server", "--appendonly", "yes"]
         ports:
         - containerPort: 6379
+          name: redis
         resources:
           requests:
             cpu: "100m"
@@ -63,6 +64,7 @@ spec:
   ports:
   - port: 6379
     targetPort: 6379
+    name: redis
     protocol: TCP
   selector:
     app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui

@@ -28,6 +28,7 @@ spec:
         image: prom/node-exporter:latest
         ports:
         - containerPort: 9100
+          name: http
         resources:
           requests:
             cpu: "100m"
@@ -39,7 +40,7 @@ spec:
         - --path.procfs=/host/proc
         - --path.sysfs=/host/sys
         - --path.rootfs=/host/root
-        - --collector.filesystem.ignored-mount-points=^/(sys|proc|dev|host|etc)(957061|/)
+        - --collector.filesystem.ignored-mount-points=^/(sys|proc|dev|host|etc)(1146953|/)
         volumeMounts:
         - name: proc
           mountPath: /host/proc
@@ -81,6 +82,7 @@ spec:
   ports:
   - port: 9100
     targetPort: 9100
+    name: http
     protocol: TCP
   selector:
     app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui

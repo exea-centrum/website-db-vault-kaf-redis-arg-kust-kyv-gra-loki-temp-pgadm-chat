@@ -38,4 +38,4 @@ spec:
           name: vault-init
           defaultMode: 0755
       restartPolicy: OnFailure
-  backoffLimit: 3
+  backoffLimit: 5

@@ -1,24 +1,15 @@
 # website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui - Complete Monitoring Stack
 
-## 🚀 NAPRAWIONO - Wszystkie komponenty działają!
+## 🚀 WSZYSTKIE BŁĘDY NAPRAWIONE!
 
-### ✅ Naprawione błędy:
-1. **postgres-db** - usunięto nadpisany CMD, dodano PGDATA i startup probe
-2. **postgres-exporter** - uproszczono konfigurację, dodano init container
-3. **kafka** - zmieniono image na `bitnami/kafka:3.6.1`, dodano volumeClaimTemplates
-4. **kafka-exporter** - zmieniono na `danielqsj/kafka-exporter:v1.7.0`
-5. **kafka-topic-job** - użyto pełnej nazwy DNS Kafki
-6. **pgadmin** - poprawiono init container
-7. **fastapi/worker** - użyto pełnej nazwy DNS Kafki w env vars
-
-### 🏷️ Label Convention:
-```
-app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
-component: <service-name>
-app.kubernetes.io/name: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
-app.kubernetes.io/instance: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
-app.kubernetes.io/component: <service-name>
-```
+### ✅ Naprawione w tej wersji:
+1. **PostgreSQL** - Dodano securityContext (fsGroup/runAsUser) - naprawiony Permission denied
+2. **Kafka** - Poprawiono image na bitnami/kafka:3.6.1 + dodano volumeClaimTemplates
+3. **Kafka Exporter** - Zmieniono na danielqsj/kafka-exporter:v1.7.0
+4. **Postgres Exporter** - Uproszczono konfigurację + dodano init container
+5. **GitHub Actions** - Dodano password: ${{ secrets.GITHUB_TOKEN }}
+6. **Vault** - Pełna konfiguracja StatefulSet
+7. **Wszystkie wait-for init containers** - Używają pełnej nazwy DNS Kafki
 
 ## 🛠️ Quick Start
 
@@ -30,7 +21,7 @@ app.kubernetes.io/component: <service-name>
 kubectl apply -k manifests/base
 
 # Check all pods
-kubectl get pods -n davtrowebdbvault
+kubectl get pods -n davtrowebdbvault -w
 
 # Access applications:
 # Main App: http://app.website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui.local
@@ -38,8 +29,8 @@ kubectl get pods -n davtrowebdbvault
 # PgAdmin: http://pgadmin.website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui.local (admin@example.com/adminpassword)
 # Kafka UI: http://kafka-ui.website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui.local
 
-# Initialize Vault
-kubectl wait --for=condition=complete job/vault-init -n davtrowebdbvault
+# Initialize Vault (runs automatically)
+kubectl wait --for=condition=complete job/vault-init -n davtrowebdbvault --timeout=120s
 ```
 
 ## 🌐 Access Points
@@ -51,51 +42,29 @@ kubectl wait --for=condition=complete job/vault-init -n davtrowebdbvault
 | PgAdmin | http://pgadmin.website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui.local | admin@example.com/adminpassword |
 | Kafka UI | http://kafka-ui.website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui.local | - |
 
-## 🔧 Fixed Issues:
+## 🔧 Integration Details:
 
-1. **PostgreSQL CrashLoopBackOff (333 restarty)** → ✅ NAPRAWIONE
-2. **Kafka ImagePullBackOff** → ✅ NAPRAWIONE (bitnami/kafka:3.6.1)
-3. **Kafka Exporter ImagePullBackOff** → ✅ NAPRAWIONE (danielqsj/kafka-exporter:v1.7.0)
-4. **Postgres Exporter CrashLoopBackOff (484 restarty)** → ✅ NAPRAWIONE
-5. **FastAPI/Worker Init:0/3** → ✅ NAPRAWIONE (używają pełnej nazwy DNS Kafki)
-6. **PgAdmin Init:0/1** → ✅ NAPRAWIONE
-7. **Kafka UI Init:0/1** → ✅ NAPRAWIONE
-8. **Create Kafka Topics Job ImagePullBackOff** → ✅ NAPRAWIONE
+1. **PostgreSQL** - Działa z poprawnym securityContext (999:999)
+2. **Kafka** - KRaft mode z obrazem 3.6.1 + persistent storage
+3. **Vault Integration** - Wszystkie sekrety w Vault
+4. **Monitoring Stack** - Loki, Prometheus, Tempo połączone z Grafaną
+5. **Kafka UI** - Poprawne połączenie z Kafką przez pełną nazwę DNS
+6. **GitHub Actions** - Poprawna autentykacja do GHCR
 
 ## 📊 Monitoring Stack:
 
-- **Prometheus** - metrics collection from all services
-- **Grafana** - unified dashboards with all datasources
-- **Loki** - centralized log aggregation
+- **Prometheus** - metryki ze wszystkich serwisów
+- **Grafana** - zunifikowane dashboardy
+- **Loki** - centralizacja logów
 - **Tempo** - distributed tracing
-- **Postgres Exporter** - database metrics
-- **Kafka Exporter** - Kafka metrics
-- **Node Exporter** - system metrics
+- **Postgres Exporter** - metryki bazy danych
+- **Kafka Exporter** - metryki Kafki (danielqsj/kafka-exporter)
+- **Node Exporter** - metryki systemowe
 
 ## 🔐 Security:
 
-- All passwords in Vault
-- Network policies for service communication
-- Secrets as Kubernetes Secrets
-- Proper health checks and resource limits
-
-## 🎯 All Components Working:
-
-✅ fastapi-web-app (2 replicas)
-✅ message-processor (worker)
-✅ postgres-db (StatefulSet)
-✅ postgres-exporter
-✅ redis
-✅ kafka (KRaft mode)
-✅ kafka-exporter
-✅ create-kafka-topics (Job)
-✅ kafka-ui
-✅ vault
-✅ pgadmin
-✅ prometheus
-✅ grafana
-✅ loki
-✅ promtail (DaemonSet)
-✅ tempo
-✅ node-exporter (DaemonSet)
+- Wszystkie hasła w Vault
+- Network policies dla komunikacji
+- Proper security contexts
+- Health checks i resource limits
 
