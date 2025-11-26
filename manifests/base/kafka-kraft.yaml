@@ -1,4 +1,40 @@
 apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kafka-config
+  namespace: davtrowebdbvault
+  labels:
+    app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
+    app.kubernetes.io/name: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
+    app.kubernetes.io/instance: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
+data:
+  server.properties: |
+    process.roles=broker,controller
+    node.id=0
+    controller.quorum.voters=0@kafka-0.kafka.davtrowebdbvault.svc.cluster.local:9093
+    listeners=PLAINTEXT://:9092,CONTROLLER://:9093
+    advertised.listeners=PLAINTEXT://kafka-0.kafka.davtrowebdbvault.svc.cluster.local:9092
+    inter.broker.listener.name=PLAINTEXT
+    listener.security.protocol.map=CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+    controller.listener.names=CONTROLLER
+    num.network.threads=3
+    num.io.threads=8
+    socket.send.buffer.bytes=102400
+    socket.receive.buffer.bytes=102400
+    socket.request.max.bytes=104857600
+    log.dirs=/tmp/kraft-combined-logs
+    num.partitions=3
+    num.recovery.threads.per.data.dir=1
+    offsets.topic.replication.factor=1
+    transaction.state.log.replication.factor=1
+    transaction.state.log.min.isr=1
+    log.retention.hours=168
+    log.segment.bytes=1073741824
+    log.retention.check.interval.ms=300000
+    auto.create.topics.enable=true
+    group.initial.rebalance.delay.ms=0
+---
+apiVersion: v1
 kind: Service
 metadata:
   name: kafka
@@ -47,57 +83,40 @@ spec:
         app.kubernetes.io/instance: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
         app.kubernetes.io/component: kafka
     spec:
-      initContainers:
-        - name: init-permissions
-          image: busybox:1.36
+      containers:
+        - name: kafka
+          image: apache/kafka:3.7.0
           command:
             - sh
             - -c
             - |
-              mkdir -p /bitnami/kafka/data
-              chown -R 1001:1001 /bitnami/kafka
-              chmod -R 755 /bitnami/kafka
-          volumeMounts:
-            - name: kafka-data
-              mountPath: /bitnami/kafka
-          securityContext:
-            runAsUser: 0
-      containers:
-        - name: kafka
-          image: docker.io/bitnami/kafka:3.6.0
-          env:
-            - name: BITNAMI_DEBUG
-              value: "true"
-            - name: KAFKA_CFG_NODE_ID
-              value: "0"
-            - name: KAFKA_CFG_PROCESS_ROLES
-              value: "controller,broker"
-            - name: KAFKA_CFG_CONTROLLER_QUORUM_VOTERS
-              value: "0@kafka-0.kafka.davtrowebdbvault.svc.cluster.local:9093"
-            - name: KAFKA_CFG_LISTENERS
-              value: "PLAINTEXT://:9092,CONTROLLER://:9093"
-            - name: KAFKA_CFG_ADVERTISED_LISTENERS
-              value: "PLAINTEXT://kafka-0.kafka.davtrowebdbvault.svc.cluster.local:9092"
-            - name: KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP
-              value: "CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT"
-            - name: KAFKA_CFG_CONTROLLER_LISTENER_NAMES
-              value: "CONTROLLER"
-            - name: KAFKA_CFG_INTER_BROKER_LISTENER_NAME
-              value: "PLAINTEXT"
-            - name: KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE
-              value: "true"
-            - name: KAFKA_KRAFT_CLUSTER_ID
-              value: "4mUj5vFk3tW7pY0iH2gR8qL6eD9oB1cZ"
-            - name: ALLOW_PLAINTEXT_LISTENER
-              value: "yes"
+              echo "Setting up Kafka KRaft mode..."
+
+              # Create config directory
+              mkdir -p /opt/kafka/config/kraft
+              cp /etc/kafka-config/server.properties /opt/kafka/config/kraft/server.properties
+
+              # Create log directory
+              mkdir -p /tmp/kraft-combined-logs
+
+              # Generate cluster ID if not formatted
+              CLUSTER_ID="4mUj5vFk3tW7pY0iH2gR8qL6eD9oB1cZ"
+
+              # Format storage (ignore error if already formatted)
+              /opt/kafka/bin/kafka-storage.sh format -t $CLUSTER_ID -c /opt/kafka/config/kraft/server.properties --ignore-formatted
+
+              echo "Starting Kafka..."
+              exec /opt/kafka/bin/kafka-server-start.sh /opt/kafka/config/kraft/server.properties
           ports:
             - containerPort: 9092
               name: client
             - containerPort: 9093
               name: controller
           volumeMounts:
+            - name: kafka-config
+              mountPath: /etc/kafka-config
             - name: kafka-data
-              mountPath: /bitnami/kafka
+              mountPath: /tmp/kraft-combined-logs
           resources:
             requests:
               cpu: "500m"
@@ -108,24 +127,21 @@ spec:
           readinessProbe:
             tcpSocket:
               port: 9092
-            initialDelaySeconds: 60
+            initialDelaySeconds: 30
             periodSeconds: 10
             timeoutSeconds: 5
             failureThreshold: 6
           livenessProbe:
             tcpSocket:
               port: 9092
-            initialDelaySeconds: 90
+            initialDelaySeconds: 60
             periodSeconds: 10
             timeoutSeconds: 5
             failureThreshold: 6
-          startupProbe:
-            tcpSocket:
-              port: 9092
-            initialDelaySeconds: 30
-            periodSeconds: 10
-            timeoutSeconds: 5
-            failureThreshold: 30
+      volumes:
+        - name: kafka-config
+          configMap:
+            name: kafka-config
   volumeClaimTemplates:
     - metadata:
         name: kafka-data

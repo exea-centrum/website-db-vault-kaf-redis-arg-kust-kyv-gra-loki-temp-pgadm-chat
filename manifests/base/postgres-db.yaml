@@ -11,8 +11,10 @@ metadata:
     app.kubernetes.io/component: postgres
 spec:
   ports:
-    - port: 5432
-      name: postgres
+    - name: postgres
+      port: 5432
+      targetPort: 5432
+      protocol: TCP
   selector:
     app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
     component: postgres
@@ -45,16 +47,21 @@ spec:
         app.kubernetes.io/instance: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
         app.kubernetes.io/component: postgres
     spec:
+      securityContext:
+        fsGroup: 999
       initContainers:
-        - name: init-permissions
-          image: busybox:1.36
+        - name: fix-permissions
+          image: postgres:15-alpine
           command:
             - sh
             - -c
             - |
+              echo "Setting up PostgreSQL data directory..."
               mkdir -p /var/lib/postgresql/data/pgdata
               chown -R 999:999 /var/lib/postgresql/data
+              chmod 700 /var/lib/postgresql/data
               chmod 700 /var/lib/postgresql/data/pgdata
+              echo "Permissions set:"
               ls -la /var/lib/postgresql/data/
           volumeMounts:
             - name: postgres-data
@@ -96,17 +103,14 @@ spec:
           readinessProbe:
             exec:
               command: ["pg_isready", "-U", "webuser", "-d", "webdb"]
-            initialDelaySeconds: 30
+            initialDelaySeconds: 10
             periodSeconds: 5
             timeoutSeconds: 3
             failureThreshold: 5
-          startupProbe:
-            exec:
-              command: ["pg_isready", "-U", "webuser", "-d", "webdb"]
-            initialDelaySeconds: 10
-            periodSeconds: 10
-            timeoutSeconds: 5
-            failureThreshold: 30
+          securityContext:
+            runAsUser: 999
+            runAsGroup: 999
+            allowPrivilegeEscalation: false
   volumeClaimTemplates:
     - metadata:
         name: postgres-data
