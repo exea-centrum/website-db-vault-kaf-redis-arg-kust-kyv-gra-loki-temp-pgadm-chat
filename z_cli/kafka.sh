@@ -128,3 +128,25 @@ kubectl apply -f kafka-topic-job.yaml
 
 # 5. Sprawdź status
 kubectl get pods -n davtrowebdbvault -w
+
+
+
+# 1. Usuń stare zasoby Kafka
+kubectl delete statefulset kafka -n davtrowebdbvault --ignore-not-found
+kubectl delete pvc kafka-data-kafka-0 -n davtrowebdbvault --ignore-not-found
+kubectl delete configmap kafka-config -n davtrowebdbvault --ignore-not-found
+
+# 2. Poczekaj
+sleep 5
+
+# 3. Zastosuj nowy manifest
+kubectl apply -f kafka-kraft.yaml
+
+# 4. Obserwuj status
+kubectl get pods -n davtrowebdbvault -w
+
+# 5. Sprawdź logi init containera
+kubectl logs kafka-0 -n davtrowebdbvault -c init-kafka
+
+# 6. Sprawdź logi głównego kontenera
+kubectl logs kafka-0 -n davtrowebdbvault -c kafka
