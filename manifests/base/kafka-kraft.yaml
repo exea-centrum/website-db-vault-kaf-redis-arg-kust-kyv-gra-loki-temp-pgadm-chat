@@ -11,26 +11,17 @@ data:
   server.properties: |
     process.roles=broker,controller
     node.id=0
-    controller.quorum.voters=0@kafka-0.kafka.davtrowebdbvault.svc.cluster.local:9093
+    controller.quorum.voters=0@localhost:9093
     listeners=PLAINTEXT://:9092,CONTROLLER://:9093
     advertised.listeners=PLAINTEXT://kafka-0.kafka.davtrowebdbvault.svc.cluster.local:9092
     inter.broker.listener.name=PLAINTEXT
     listener.security.protocol.map=CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
     controller.listener.names=CONTROLLER
-    num.network.threads=3
-    num.io.threads=8
-    socket.send.buffer.bytes=102400
-    socket.receive.buffer.bytes=102400
-    socket.request.max.bytes=104857600
-    log.dirs=/tmp/kraft-combined-logs
+    log.dirs=/var/lib/kafka/data
     num.partitions=3
-    num.recovery.threads.per.data.dir=1
     offsets.topic.replication.factor=1
     transaction.state.log.replication.factor=1
     transaction.state.log.min.isr=1
-    log.retention.hours=168
-    log.segment.bytes=1073741824
-    log.retention.check.interval.ms=300000
     auto.create.topics.enable=true
     group.initial.rebalance.delay.ms=0
 ---
@@ -83,47 +74,75 @@ spec:
         app.kubernetes.io/instance: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
         app.kubernetes.io/component: kafka
     spec:
-      containers:
-        - name: kafka
-          image: apache/kafka:3.7.0
+      securityContext:
+        fsGroup: 1000
+      initContainers:
+        - name: init-kafka
+          image: apache/kafka:3.9.0
           command:
             - sh
             - -c
             - |
-              echo "Setting up Kafka KRaft mode..."
+              set -e
+              echo "=== Initializing Kafka ==="
 
-              # Create config directory
-              mkdir -p /opt/kafka/config/kraft
-              cp /etc/kafka-config/server.properties /opt/kafka/config/kraft/server.properties
+              # Create data directory
+              mkdir -p /var/lib/kafka/data
 
-              # Create log directory
-              mkdir -p /tmp/kraft-combined-logs
+              # Copy config
+              cp /etc/kafka-config/server.properties /tmp/server.properties
 
-              # Generate cluster ID if not formatted
-              CLUSTER_ID="4mUj5vFk3tW7pY0iH2gR8qL6eD9oB1cZ"
+              # Check if already formatted
+              if [ ! -f /var/lib/kafka/data/meta.properties ]; then
+                echo "Formatting Kafka storage..."
+                KAFKA_CLUSTER_ID="MkU3OEVBNTcwNTJENDM2Qk"
+                /opt/kafka/bin/kafka-storage.sh format \
+                  --config /tmp/server.properties \
+                  --cluster-id $KAFKA_CLUSTER_ID \
+                  --ignore-formatted
+                echo "Storage formatted successfully"
+              else
+                echo "Storage already formatted, skipping..."
+              fi
 
-              # Format storage (ignore error if already formatted)
-              /opt/kafka/bin/kafka-storage.sh format -t $CLUSTER_ID -c /opt/kafka/config/kraft/server.properties --ignore-formatted
-
-              echo "Starting Kafka..."
-              exec /opt/kafka/bin/kafka-server-start.sh /opt/kafka/config/kraft/server.properties
+              echo "=== Init complete ==="
+          volumeMounts:
+            - name: kafka-data
+              mountPath: /var/lib/kafka/data
+            - name: kafka-config
+              mountPath: /etc/kafka-config
+          securityContext:
+            runAsUser: 0
+      containers:
+        - name: kafka
+          image: apache/kafka:3.9.0
+          command:
+            - sh
+            - -c
+            - |
+              echo "=== Starting Kafka ==="
+              cp /etc/kafka-config/server.properties /tmp/server.properties
+              exec /opt/kafka/bin/kafka-server-start.sh /tmp/server.properties
           ports:
             - containerPort: 9092
               name: client
             - containerPort: 9093
               name: controller
+          env:
+            - name: KAFKA_HEAP_OPTS
+              value: "-Xmx512M -Xms512M"
           volumeMounts:
+            - name: kafka-data
+              mountPath: /var/lib/kafka/data
             - name: kafka-config
               mountPath: /etc/kafka-config
-            - name: kafka-data
-              mountPath: /tmp/kraft-combined-logs
           resources:
             requests:
-              cpu: "500m"
-              memory: "1Gi"
+              cpu: "250m"
+              memory: "512Mi"
             limits:
               cpu: "1000m"
-              memory: "2Gi"
+              memory: "1Gi"
           readinessProbe:
             tcpSocket:
               port: 9092
@@ -149,4 +168,4 @@ spec:
         accessModes: ["ReadWriteOnce"]
         resources:
           requests:
-            storage: 10Gi
+            storage: 5Gi
