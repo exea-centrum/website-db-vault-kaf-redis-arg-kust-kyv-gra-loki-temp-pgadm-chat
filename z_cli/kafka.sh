@@ -109,3 +109,22 @@ kubectl logs -n davtrowebdbvault deployment/kafka-exporter -f
 # Sprawdź czy Kafka Exporter zbiera metryki
 kubectl port-forward -n davtrowebdbvault svc/kafka-exporter 9308:9308
 # Następnie w przeglądarce: http://localhost:9308/metrics
+
+
+# 1. Usuń stare PVC (ważne - mają złe uprawnienia)
+kubectl delete pvc postgres-data-postgres-db-0 -n davtrowebdbvault --ignore-not-found
+kubectl delete pvc kafka-data-kafka-0 -n davtrowebdbvault --ignore-not-found
+
+# 2. Usuń stare StatefulSets
+kubectl delete statefulset postgres-db kafka -n davtrowebdbvault --ignore-not-found
+
+# 3. Usuń stary Job
+kubectl delete job create-kafka-topics -n davtrowebdbvault --ignore-not-found
+
+# 4. Zastosuj poprawione manifesty
+kubectl apply -f postgres-db.yaml
+kubectl apply -f kafka-kraft.yaml
+kubectl apply -f kafka-topic-job.yaml
+
+# 5. Sprawdź status
+kubectl get pods -n davtrowebdbvault -w

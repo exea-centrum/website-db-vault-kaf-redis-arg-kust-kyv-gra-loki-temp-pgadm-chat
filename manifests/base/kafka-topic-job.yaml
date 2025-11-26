@@ -20,26 +20,30 @@ spec:
         app.kubernetes.io/component: kafka-topic-job
     spec:
       containers:
-      - name: create-topics
-        image: bitnami/kafka:3.6.1
-        command:
-        - /bin/bash
-        - -c
-        - |
-          # Wait for Kafka to be ready
-          echo "Waiting for Kafka to be ready..."
-          for i in {1..60}; do
-            if /opt/bitnami/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server kafka-0.kafka.davtrowebdbvault.svc.cluster.local:9092 &>/dev/null; then
-              echo "Kafka is ready!"
-              break
-            fi
-            echo "Attempt $i/60: Kafka not ready yet..."
-            sleep 10
-          done
-          
-          # Create survey topic
-          /opt/bitnami/kafka/bin/kafka-topics.sh --create             --bootstrap-server kafka-0.kafka.davtrowebdbvault.svc.cluster.local:9092             --topic survey-topic             --partitions 3             --replication-factor 1             --config retention.ms=604800000             --if-not-exists || echo "Topic already exists"
-          
-          echo "Kafka topics created successfully"
+        - name: create-topics
+          image: bitnami/kafka:3.6
+          command:
+            - /bin/bash
+            - -c
+            - |
+              echo "Waiting for Kafka to be ready..."
+              for i in {1..60}; do
+                if /opt/bitnami/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server kafka-0.kafka.davtrowebdbvault.svc.cluster.local:9092 &>/dev/null; then
+                  echo "Kafka is ready!"
+                  break
+                fi
+                echo "Attempt $i/60: Kafka not ready yet..."
+                sleep 10
+              done
+
+              /opt/bitnami/kafka/bin/kafka-topics.sh --create \
+                --bootstrap-server kafka-0.kafka.davtrowebdbvault.svc.cluster.local:9092 \
+                --topic survey-topic \
+                --partitions 3 \
+                --replication-factor 1 \
+                --config retention.ms=604800000 \
+                --if-not-exists || echo "Topic already exists"
+
+              echo "Kafka topics created successfully"
       restartPolicy: OnFailure
   backoffLimit: 5
