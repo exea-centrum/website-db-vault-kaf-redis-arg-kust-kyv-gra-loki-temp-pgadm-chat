@@ -1807,6 +1807,8 @@ spec:
           value: "true"
         - name: KAFKA_CLUSTER_ID
           value: "${KAFKA_CLUSTER_ID}"
+        - name: CLUSTER_ID
+          value: "${KAFKA_CLUSTER_ID}"
         - name: KAFKA_LOG_DIR
           value: "/var/lib/kafka/data"
         - name: KAFKA_LOG_RETENTION_HOURS
