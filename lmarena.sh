@@ -1805,32 +1805,30 @@ spec:
     spec:
       containers:
       - name: kafka
-        image: bitnami/kafka:3.6.1
+        image: apache/kafka:3.6.0
         env:
-        - name: KAFKA_CFG_BROKER_ID
+        - name: KAFKA_BROKER_ID
           value: "0"
-        - name: KAFKA_CFG_PROCESS_ROLES
+        - name: KAFKA_PROCESS_ROLES
           value: "broker,controller"
-        - name: KAFKA_CFG_CONTROLLER_QUORUM_VOTERS
+        - name: KAFKA_CONTROLLER_QUORUM_VOTERS
           value: "0@kafka-0.kafka.${NAMESPACE}.svc.cluster.local:9093"
-        - name: KAFKA_CFG_LISTENERS
+        - name: KAFKA_LISTENERS
           value: "PLAINTEXT://:9092,CONTROLLER://:9093"
-        - name: KAFKA_CFG_ADVERTISED_LISTENERS
+        - name: KAFKA_ADVERTISED_LISTENERS
           value: "PLAINTEXT://kafka-0.kafka.${NAMESPACE}.svc.cluster.local:9092"
-        - name: KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP
+        - name: KAFKA_LISTENER_SECURITY_PROTOCOL_MAP
           value: "CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT"
-        - name: KAFKA_CFG_CONTROLLER_LISTENER_NAMES
+        - name: KAFKA_CONTROLLER_LISTENER_NAMES
           value: "CONTROLLER"
-        - name: KAFKA_CFG_INTER_BROKER_LISTENER_NAME
+        - name: KAFKA_INTER_BROKER_LISTENER_NAME
           value: "PLAINTEXT"
-        - name: KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE
+        - name: KAFKA_AUTO_CREATE_TOPICS_ENABLE
           value: "true"
-        - name: KAFKA_CFG_LOG_RETENTION_HOURS
+        - name: KAFKA_LOG_RETENTION_HOURS
           value: "168"
-        - name: KAFKA_CFG_AUTO_LEADER_REBALANCE_ENABLE
+        - name: KAFKA_AUTO_LEADER_REBALANCE_ENABLE
           value: "true"
-        - name: KAFKA_CFG_KRAFT_QUORUM_VOTERS
-          value: "0@kafka-0.kafka.${NAMESPACE}.svc.cluster.local:9093"
         ports:
         - containerPort: 9092
           name: client
