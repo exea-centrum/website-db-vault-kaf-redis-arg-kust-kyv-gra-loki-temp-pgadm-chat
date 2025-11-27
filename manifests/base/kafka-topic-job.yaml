@@ -22,14 +22,14 @@ spec:
       serviceAccountName: kafka-job-sa
       initContainers:
         - name: wait-for-kafka-broker
-          image: bitnami/kafka:3.6.1
+          image: apache/kafka:3.6.0
           command:
             - /bin/bash
             - -c
             - |
               echo "Waiting for Kafka broker to be ready..."
               for i in {1..120}; do
-                if /opt/bitnami/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server kafka-0.kafka.davtrowebdbvault.svc.cluster.local:9092 &>/dev/null; then
+                if /opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server kafka-0.kafka.davtrowebdbvault.svc.cluster.local:9092 &>/dev/null; then
                   echo "✓ Kafka broker is ready!"
                   exit 0
                 fi
@@ -40,16 +40,16 @@ spec:
               exit 1
       containers:
         - name: create-topics
-          image: bitnami/kafka:3.6.1
+          image: apache/kafka:3.6.0
           command:
             - /bin/bash
             - -c
             - |
               set -e
               echo "Creating Kafka topics..."
-              
+
               # Create survey topic with better settings
-              /opt/bitnami/kafka/bin/kafka-topics.sh --create \
+              /opt/kafka/bin/kafka-topics.sh --create \
                 --bootstrap-server kafka-0.kafka.davtrowebdbvault.svc.cluster.local:9092 \
                 --topic survey-topic \
                 --partitions 3 \
@@ -57,12 +57,12 @@ spec:
                 --config retention.ms=604800000 \
                 --config min.insync.replicas=1 \
                 --if-not-exists
-              
+
               # Verify topic was created
               echo "Verifying topics..."
-              /opt/bitnami/kafka/bin/kafka-topics.sh --list \
+              /opt/kafka/bin/kafka-topics.sh --list \
                 --bootstrap-server kafka-0.kafka.davtrowebdbvault.svc.cluster.local:9092
-              
+
               echo "✓ Kafka topics created successfully"
       restartPolicy: OnFailure
   backoffLimit: 5

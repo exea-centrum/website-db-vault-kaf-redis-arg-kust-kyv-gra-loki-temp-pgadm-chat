@@ -967,7 +967,7 @@ spec:
             [
               "sh",
               "-c",
-              'until pg_isready -h postgres-db -p 5432 -U webuser; do echo "waiting for postgres..."; sleep 10; done; echo "postgres ready"',
+              'until pg_isready -h postgres-db -p 5432 -U webuser; do echo "waiting for postgres..."; sleep 5; done; echo "postgres ready"',
             ]
           env:
             - name: PGPASSWORD
@@ -975,20 +975,28 @@ spec:
             - name: PGUSER
               value: "webuser"
         - name: wait-for-redis
-          image: busybox:1.35
+          image: busybox:1.36
           command:
             [
               "sh",
               "-c",
-              'until nc -z redis 6379; do echo "waiting for redis..."; sleep 10; done; echo "redis ready"',
+              'until nc -z redis 6379; do echo "waiting for redis..."; sleep 5; done; echo "redis ready"',
             ]
-        - name: wait-for-kafka
-          image: busybox:1.35
+        - name: wait-for-kafka-broker
+          image: apache/kafka:3.6.0
           command:
             [
-              "sh",
+              "/bin/bash",
               "-c",
-              'until nc -z kafka-0.kafka.${NAMESPACE}.svc.cluster.local 9092; do echo "waiting for kafka..."; sleep 10; done; echo "kafka ready"',
+              'for i in {1..120}; do if /opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server kafka-0.kafka.${NAMESPACE}.svc.cluster.local:9092 &>/dev/null; then echo "✓ kafka broker ready"; break; fi; echo "Attempt $i/120: Kafka not ready..."; sleep 5; done',
+            ]
+        - name: wait-for-kafka-topics
+          image: apache/kafka:3.6.0
+          command:
+            [
+              "/bin/bash",
+              "-c",
+              'for i in {1..120}; do if /opt/kafka/bin/kafka-topics.sh --list --bootstrap-server kafka-0.kafka.${NAMESPACE}.svc.cluster.local:9092 2>/dev/null | grep -q "^survey-topic$"; then echo "✓ survey-topic exists"; break; fi; echo "Attempt $i/120: survey-topic not ready..."; sleep 5; done',
             ]
       containers:
       - name: app
@@ -1769,32 +1777,28 @@ spec:
     spec:
       containers:
       - name: kafka
-        image: bitnami/kafka:3.6.1
+        image: apache/kafka:3.6.0
         env:
-        - name: BITNAMI_DEBUG
-          value: "false"
-        - name: KAFKA_CFG_NODE_ID
+        - name: KAFKA_NODE_ID
           value: "0"
-        - name: KAFKA_CFG_PROCESS_ROLES
-          value: "controller,broker"
-        - name: KAFKA_CFG_CONTROLLER_QUORUM_VOTERS
+        - name: KAFKA_PROCESS_ROLES
+          value: "broker,controller"
+        - name: KAFKA_CONTROLLER_QUORUM_VOTERS
           value: "0@kafka-0.kafka.${NAMESPACE}.svc.cluster.local:9093"
-        - name: KAFKA_CFG_LISTENERS
+        - name: KAFKA_LISTENERS
           value: "PLAINTEXT://:9092,CONTROLLER://:9093"
-        - name: KAFKA_CFG_ADVERTISED_LISTENERS
+        - name: KAFKA_ADVERTISED_LISTENERS
           value: "PLAINTEXT://kafka-0.kafka.${NAMESPACE}.svc.cluster.local:9092"
-        - name: KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP
+        - name: KAFKA_LISTENER_SECURITY_PROTOCOL_MAP
           value: "CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT"
-        - name: KAFKA_CFG_CONTROLLER_LISTENER_NAMES
+        - name: KAFKA_CONTROLLER_LISTENER_NAMES
           value: "CONTROLLER"
-        - name: KAFKA_CFG_INTER_BROKER_LISTENER_NAME
+        - name: KAFKA_INTER_BROKER_LISTENER_NAME
           value: "PLAINTEXT"
-        - name: KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE
+        - name: KAFKA_AUTO_CREATE_TOPICS_ENABLE
           value: "true"
-        - name: KAFKA_KRAFT_CLUSTER_ID
+        - name: KAFKA_CLUSTER_ID
           value: "${KAFKA_CLUSTER_ID}"
-        - name: ALLOW_PLAINTEXT_LISTENER
-          value: "yes"
         ports:
         - containerPort: 9092
           name: client
@@ -1802,7 +1806,7 @@ spec:
           name: controller
         volumeMounts:
         - name: kafka-data
-          mountPath: /bitnami/kafka
+          mountPath: /var/lib/kafka/data
         resources:
           requests:
             cpu: "500m"
@@ -1841,7 +1845,7 @@ spec:
           storage: 10Gi
 YAML
 
- # kafka-topic-job - NAPRAWIONE
+ # kafka-topic-job - NAPRAWIONE Z WAITEM NA KAFKA
  cat > "${BASE_DIR}/kafka-topic-job.yaml" <<YAML
 apiVersion: batch/v1
 kind: Job
@@ -1855,6 +1859,8 @@ metadata:
     app.kubernetes.io/instance: ${PROJECT}
     app.kubernetes.io/component: kafka-topic-job
 spec:
+  backoffLimit: 5
+  ttlSecondsAfterFinished: 3600
   template:
     metadata:
       labels:
@@ -1864,36 +1870,52 @@ spec:
         app.kubernetes.io/instance: ${PROJECT}
         app.kubernetes.io/component: kafka-topic-job
     spec:
+      serviceAccountName: kafka-job-sa
+      initContainers:
+        - name: wait-for-kafka-broker
+          image: apache/kafka:3.6.0
+          command:
+            - /bin/bash
+            - -c
+            - |
+              echo "Waiting for Kafka broker to be ready..."
+              for i in {1..120}; do
+                if /opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server kafka-0.kafka.${NAMESPACE}.svc.cluster.local:9092 &>/dev/null; then
+                  echo "✓ Kafka broker is ready!"
+                  exit 0
+                fi
+                echo "Attempt $i/120: Kafka not ready..."
+                sleep 5
+              done
+              echo "✗ Kafka broker failed to start"
+              exit 1
       containers:
-      - name: create-topics
-        image: bitnami/kafka:3.6.1
-        command:
-        - /bin/bash
-        - -c
-        - |
-          # Wait for Kafka to be ready
-          echo "Waiting for Kafka to be ready..."
-          for i in {1..60}; do
-            if /opt/bitnami/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server kafka-0.kafka.${NAMESPACE}.svc.cluster.local:9092 &>/dev/null; then
-              echo "Kafka is ready!"
-              break
-            fi
-            echo "Attempt \$i/60: Kafka not ready yet..."
-            sleep 10
-          done
-          
-          # Create survey topic
-          /opt/bitnami/kafka/bin/kafka-topics.sh --create \
-            --bootstrap-server kafka-0.kafka.${NAMESPACE}.svc.cluster.local:9092 \
-            --topic survey-topic \
-            --partitions 3 \
-            --replication-factor 1 \
-            --config retention.ms=604800000 \
-            --if-not-exists || echo "Topic already exists"
-          
-          echo "Kafka topics created successfully"
+        - name: create-topics
+          image: apache/kafka:3.6.0
+          command:
+            - /bin/bash
+            - -c
+            - |
+              set -e
+              echo "Creating Kafka topics..."
+              
+              # Create survey topic with better settings
+              /opt/kafka/bin/kafka-topics.sh --create \
+                --bootstrap-server kafka-0.kafka.${NAMESPACE}.svc.cluster.local:9092 \
+                --topic survey-topic \
+                --partitions 3 \
+                --replication-factor 1 \
+                --config retention.ms=604800000 \
+                --config min.insync.replicas=1 \
+                --if-not-exists
+              
+              # Verify topic was created
+              echo "Verifying topics..."
+              /opt/kafka/bin/kafka-topics.sh --list \
+                --bootstrap-server kafka-0.kafka.${NAMESPACE}.svc.cluster.local:9092
+              
+              echo "✓ Kafka topics created successfully"
       restartPolicy: OnFailure
-  backoffLimit: 5
 YAML
 
  # kafka-ui - OPTIMIZED
@@ -1926,17 +1948,22 @@ spec:
     spec:
       initContainers:
         - name: wait-for-kafka
-          image: busybox:1.35
+          image: apache/kafka:3.6.0
           command:
-            - "sh"
-            - "-c"
+            - /bin/bash
+            - -c
             - |
-              echo "Waiting for Kafka to be ready..."
-              until nc -z kafka-0.kafka.${NAMESPACE}.svc.cluster.local 9092; do
-                echo "Waiting for Kafka..."
-                sleep 10
+              echo "Waiting for Kafka broker to be ready..."
+              for i in {1..120}; do
+                if /opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server kafka-0.kafka.${NAMESPACE}.svc.cluster.local:9092 &>/dev/null; then
+                  echo "✓ Kafka broker is ready!"
+                  exit 0
+                fi
+                echo "Attempt $i/120: Kafka not ready..."
+                sleep 5
               done
-              echo "Kafka is ready!"
+              echo "✗ Kafka broker failed to start"
+              exit 1
       containers:
       - name: kafka-ui
         image: provectuslabs/kafka-ui:latest
@@ -2178,17 +2205,22 @@ spec:
     spec:
       initContainers:
         - name: wait-for-kafka
-          image: busybox:1.35
+          image: apache/kafka:3.6.0
           command:
-            - "sh"
-            - "-c"
+            - /bin/bash
+            - -c
             - |
-              echo "Waiting for Kafka to be ready..."
-              until nc -z kafka-0.kafka.${NAMESPACE}.svc.cluster.local 9092; do
-                echo "Waiting for Kafka..."
-                sleep 10
+              echo "Waiting for Kafka broker to be ready..."
+              for i in {1..120}; do
+                if /opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server kafka-0.kafka.${NAMESPACE}.svc.cluster.local:9092 &>/dev/null; then
+                  echo "✓ Kafka broker is ready!"
+                  exit 0
+                fi
+                echo "Attempt $i/120: Kafka not ready..."
+                sleep 5
               done
-              echo "Kafka is ready!"
+              echo "✗ Kafka broker failed to start"
+              exit 1
       containers:
       - name: kafka-exporter
         image: danielqsj/kafka-exporter:v1.7.0
