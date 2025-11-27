@@ -1805,7 +1805,7 @@ spec:
     spec:
       containers:
       - name: kafka
-        image: apache/kafka:3.6.0
+        image: confluentinc/cp-kafka:7.5.0
         env:
         - name: KAFKA_BROKER_ID
           value: "0"
@@ -1825,6 +1825,8 @@ spec:
           value: "PLAINTEXT"
         - name: KAFKA_AUTO_CREATE_TOPICS_ENABLE
           value: "true"
+        - name: KAFKA_LOG_DIR
+          value: "/var/lib/kafka/data"
         - name: KAFKA_LOG_RETENTION_HOURS
           value: "168"
         - name: KAFKA_AUTO_LEADER_REBALANCE_ENABLE
