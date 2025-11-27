@@ -10,6 +10,7 @@ resources:
 
   # 2. Message queue and streaming
   - kafka-kraft.yaml
+  - kafka-job-sa.yaml
   - kafka-topic-job.yaml
 
   # 3. Application components

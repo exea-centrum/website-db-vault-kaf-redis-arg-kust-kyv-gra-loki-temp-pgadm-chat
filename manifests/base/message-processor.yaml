@@ -54,47 +54,55 @@ spec:
               "-c",
               'until nc -z kafka-0.kafka.davtrowebdbvault.svc.cluster.local 9092; do echo "waiting for kafka..."; sleep 10; done; echo "kafka ready"',
             ]
+        - name: wait-for-kafka-topics
+          image: bitnami/kafka:3.6.1
+          command:
+            [
+              "/bin/bash",
+              "-c",
+              'for i in {1..120}; do if /opt/bitnami/kafka/bin/kafka-topics.sh --list --bootstrap-server kafka-0.kafka.davtrowebdbvault.svc.cluster.local:9092 2>/dev/null | grep -q "^survey-topic$"; then echo "✓ survey-topic ready"; break; fi; echo "Attempt $i/120: survey-topic not ready..."; sleep 5; done',
+            ]
       containers:
-      - name: worker
-        image: ghcr.io/exea-centrum/website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui:latest
-        command: ["python", "worker.py"]
-        env:
-        - name: REDIS_HOST
-          value: "redis"
-        - name: REDIS_PORT
-          value: "6379"
-        - name: REDIS_LIST
-          value: "outgoing_messages"
-        - name: KAFKA_BOOTSTRAP_SERVERS
-          value: "kafka-0.kafka.davtrowebdbvault.svc.cluster.local:9092"
-        - name: KAFKA_TOPIC
-          value: "survey-topic"
-        - name: VAULT_ADDR
-          value: "http://vault:8200"
-        - name: VAULT_TOKEN
-          value: "root"
-        - name: DATABASE_URL
-          value: "dbname=webdb user=webuser password=testpassword host=postgres-db port=5432"
-        resources:
-          requests:
-            cpu: "200m"
-            memory: "256Mi"
-          limits:
-            cpu: "500m"
-            memory: "512Mi"
-        livenessProbe:
-          exec:
-            command:
-              - sh
-              - -c
-              - 'python -c "import redis; redis.Redis(host=\"redis\", port=6379, socket_connect_timeout=5).ping()"'
-          initialDelaySeconds: 60
-          periodSeconds: 30
-        readinessProbe:
-          exec:
-            command:
-              - sh
-              - -c
-              - 'python -c "import redis; redis.Redis(host=\"redis\", port=6379, socket_connect_timeout=5).ping()"'
-          initialDelaySeconds: 30
-          periodSeconds: 10
+        - name: worker
+          image: ghcr.io/exea-centrum/website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui:latest
+          command: ["python", "worker.py"]
+          env:
+            - name: REDIS_HOST
+              value: "redis"
+            - name: REDIS_PORT
+              value: "6379"
+            - name: REDIS_LIST
+              value: "outgoing_messages"
+            - name: KAFKA_BOOTSTRAP_SERVERS
+              value: "kafka-0.kafka.davtrowebdbvault.svc.cluster.local:9092"
+            - name: KAFKA_TOPIC
+              value: "survey-topic"
+            - name: VAULT_ADDR
+              value: "http://vault:8200"
+            - name: VAULT_TOKEN
+              value: "root"
+            - name: DATABASE_URL
+              value: "dbname=webdb user=webuser password=testpassword host=postgres-db port=5432"
+          resources:
+            requests:
+              cpu: "200m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          livenessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - 'python -c "import redis; redis.Redis(host=\"redis\", port=6379, socket_connect_timeout=5).ping()"'
+            initialDelaySeconds: 60
+            periodSeconds: 30
+          readinessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - 'python -c "import redis; redis.Redis(host=\"redis\", port=6379, socket_connect_timeout=5).ping()"'
+            initialDelaySeconds: 30
+            periodSeconds: 10

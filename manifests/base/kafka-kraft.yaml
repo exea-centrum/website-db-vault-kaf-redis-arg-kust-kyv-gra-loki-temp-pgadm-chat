@@ -49,7 +49,7 @@ spec:
     spec:
       containers:
         - name: kafka
-          image: bitnami/kafka:latest
+          image: bitnami/kafka:3.6.1
           env:
             - name: BITNAMI_DEBUG
               value: "false"
