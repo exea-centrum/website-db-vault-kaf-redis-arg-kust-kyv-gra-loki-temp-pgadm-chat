@@ -1687,6 +1687,21 @@ spec:
         app.kubernetes.io/instance: ${PROJECT}
         app.kubernetes.io/component: redis
     spec:
+      securityContext:
+        runAsUser: 1000
+        fsGroup: 1000
+      initContainers:
+        - name: fix-permissions
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - |
+              echo "Fixing permissions on /var/lib/kafka/data..."
+              chown -R 1000:1000 /var/lib/kafka/data || true
+          volumeMounts:
+            - name: kafka-data
+              mountPath: /var/lib/kafka/data/
       containers:
       - name: redis
         image: redis:7-alpine
