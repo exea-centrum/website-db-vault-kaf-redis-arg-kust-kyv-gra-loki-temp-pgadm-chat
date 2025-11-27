@@ -59,7 +59,8 @@ spec:
             - sh
             - -c
             - |
-              echo "Fixing permissions on /var/lib/kafka/data..."
+              echo "Cleaning and preparing /var/lib/kafka/data..."
+              rm -rf /var/lib/kafka/data/* /var/lib/kafka/data/.*
               chown -R 1000:1000 /var/lib/kafka/data
               chmod -R 2775 /var/lib/kafka/data
               ls -la /var/lib/kafka || true
@@ -88,10 +89,6 @@ spec:
               value: "PLAINTEXT"
             - name: KAFKA_AUTO_CREATE_TOPICS_ENABLE
               value: "true"
-            - name: KAFKA_CLUSTER_ID
-              value: "00b0bc82-e1aa-4de0-8530-7dd209a3af28"
-            - name: CLUSTER_ID
-              value: "00b0bc82-e1aa-4de0-8530-7dd209a3af28"
             - name: KAFKA_LOG_DIR
               value: "/var/lib/kafka/data"
             - name: KAFKA_LOG_RETENTION_HOURS

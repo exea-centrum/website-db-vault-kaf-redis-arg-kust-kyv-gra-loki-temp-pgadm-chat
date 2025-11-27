@@ -1699,7 +1699,8 @@ spec:
             - sh
             - -c
             - |
-              echo "Fixing permissions on /var/lib/kafka/data..."
+              echo "Cleaning and preparing /var/lib/kafka/data..."
+              rm -rf /var/lib/kafka/data/* /var/lib/kafka/data/.*
               chown -R 1000:1000 /var/lib/kafka/data
               chmod -R 2775 /var/lib/kafka/data
               ls -la /var/lib/kafka || true
