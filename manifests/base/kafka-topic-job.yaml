@@ -21,14 +21,15 @@ spec:
     spec:
       containers:
         - name: create-topics
-          image: apache/kafka:3.7.0
+          image: bitnami/kafka:3.6.1
           command:
-            - /bin/sh
+            - /bin/bash
             - -c
             - |
               echo "Waiting for Kafka to be ready..."
-              for i in $(seq 1 60); do
-                if /opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server kafka-0.kafka.davtrowebdbvault.svc.cluster.local:9092 2>/dev/null; then
+              for i in {1..60}; do
+                if /opt/bitnami/kafka/bin/kafka-broker-api-versions.sh \
+                   --bootstrap-server kafka-0.kafka.davtrowebdbvault.svc.cluster.local:9092 &>/dev/null; then
                   echo "Kafka is ready!"
                   break
                 fi
@@ -36,18 +37,19 @@ spec:
                 sleep 10
               done
 
-              echo "Creating topics..."
-              /opt/kafka/bin/kafka-topics.sh --create \
+              # Create survey topic
+              /opt/bitnami/kafka/bin/kafka-topics.sh --create \
                 --bootstrap-server kafka-0.kafka.davtrowebdbvault.svc.cluster.local:9092 \
                 --topic survey-topic \
                 --partitions 3 \
                 --replication-factor 1 \
                 --config retention.ms=604800000 \
-                --if-not-exists
+                --if-not-exists || echo "Topic already exists"
 
-              echo "Listing topics:"
-              /opt/kafka/bin/kafka-topics.sh --list --bootstrap-server kafka-0.kafka.davtrowebdbvault.svc.cluster.local:9092
+              echo "Topics created successfully"
 
-              echo "Done!"
+              # List all topics
+              /opt/bitnami/kafka/bin/kafka-topics.sh --list \
+                --bootstrap-server kafka-0.kafka.davtrowebdbvault.svc.cluster.local:9092
       restartPolicy: OnFailure
   backoffLimit: 5

@@ -1,31 +1,4 @@
 apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: kafka-config
-  namespace: davtrowebdbvault
-  labels:
-    app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
-    app.kubernetes.io/name: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
-    app.kubernetes.io/instance: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
-data:
-  server.properties: |
-    process.roles=broker,controller
-    node.id=0
-    controller.quorum.voters=0@localhost:9093
-    listeners=PLAINTEXT://:9092,CONTROLLER://:9093
-    advertised.listeners=PLAINTEXT://kafka-0.kafka.davtrowebdbvault.svc.cluster.local:9092
-    inter.broker.listener.name=PLAINTEXT
-    listener.security.protocol.map=CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
-    controller.listener.names=CONTROLLER
-    log.dirs=/var/lib/kafka/data
-    num.partitions=3
-    offsets.topic.replication.factor=1
-    transaction.state.log.replication.factor=1
-    transaction.state.log.min.isr=1
-    auto.create.topics.enable=true
-    group.initial.rebalance.delay.ms=0
----
-apiVersion: v1
 kind: Service
 metadata:
   name: kafka
@@ -74,93 +47,70 @@ spec:
         app.kubernetes.io/instance: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
         app.kubernetes.io/component: kafka
     spec:
-      securityContext:
-        fsGroup: 1000
-      initContainers:
-        - name: init-kafka
-          image: apache/kafka:3.9.0
-          command:
-            - sh
-            - -c
-            - |
-              set -e
-              echo "=== Initializing Kafka ==="
-
-              # Create data directory
-              mkdir -p /var/lib/kafka/data
-
-              # Copy config
-              cp /etc/kafka-config/server.properties /tmp/server.properties
-
-              # Check if already formatted
-              if [ ! -f /var/lib/kafka/data/meta.properties ]; then
-                echo "Formatting Kafka storage..."
-                KAFKA_CLUSTER_ID="MkU3OEVBNTcwNTJENDM2Qk"
-                /opt/kafka/bin/kafka-storage.sh format \
-                  --config /tmp/server.properties \
-                  --cluster-id $KAFKA_CLUSTER_ID \
-                  --ignore-formatted
-                echo "Storage formatted successfully"
-              else
-                echo "Storage already formatted, skipping..."
-              fi
-
-              echo "=== Init complete ==="
-          volumeMounts:
-            - name: kafka-data
-              mountPath: /var/lib/kafka/data
-            - name: kafka-config
-              mountPath: /etc/kafka-config
-          securityContext:
-            runAsUser: 0
       containers:
         - name: kafka
-          image: apache/kafka:3.9.0
-          command:
-            - sh
-            - -c
-            - |
-              echo "=== Starting Kafka ==="
-              cp /etc/kafka-config/server.properties /tmp/server.properties
-              exec /opt/kafka/bin/kafka-server-start.sh /tmp/server.properties
+          image: bitnami/kafka:3.6.1
+          env:
+            - name: BITNAMI_DEBUG
+              value: "false"
+            - name: KAFKA_CFG_NODE_ID
+              value: "0"
+            - name: KAFKA_CFG_PROCESS_ROLES
+              value: "controller,broker"
+            - name: KAFKA_CFG_CONTROLLER_QUORUM_VOTERS
+              value: "0@kafka-0.kafka.davtrowebdbvault.svc.cluster.local:9093"
+            - name: KAFKA_CFG_LISTENERS
+              value: "PLAINTEXT://:9092,CONTROLLER://:9093"
+            - name: KAFKA_CFG_ADVERTISED_LISTENERS
+              value: "PLAINTEXT://kafka-0.kafka.davtrowebdbvault.svc.cluster.local:9092"
+            - name: KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP
+              value: "CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT"
+            - name: KAFKA_CFG_CONTROLLER_LISTENER_NAMES
+              value: "CONTROLLER"
+            - name: KAFKA_CFG_INTER_BROKER_LISTENER_NAME
+              value: "PLAINTEXT"
+            - name: KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE
+              value: "true"
+            - name: KAFKA_KRAFT_CLUSTER_ID
+              value: "4mUj5vFk3tW7pY0iH2gR8qL6eD9oB1cZ"
+            - name: ALLOW_PLAINTEXT_LISTENER
+              value: "yes"
           ports:
             - containerPort: 9092
               name: client
             - containerPort: 9093
               name: controller
-          env:
-            - name: KAFKA_HEAP_OPTS
-              value: "-Xmx512M -Xms512M"
           volumeMounts:
             - name: kafka-data
-              mountPath: /var/lib/kafka/data
-            - name: kafka-config
-              mountPath: /etc/kafka-config
+              mountPath: /bitnami/kafka
           resources:
             requests:
-              cpu: "250m"
-              memory: "512Mi"
+              cpu: "500m"
+              memory: "1Gi"
             limits:
               cpu: "1000m"
-              memory: "1Gi"
+              memory: "2Gi"
           readinessProbe:
-            tcpSocket:
-              port: 9092
-            initialDelaySeconds: 30
-            periodSeconds: 10
-            timeoutSeconds: 5
-            failureThreshold: 6
-          livenessProbe:
             tcpSocket:
               port: 9092
             initialDelaySeconds: 60
             periodSeconds: 10
             timeoutSeconds: 5
             failureThreshold: 6
-      volumes:
-        - name: kafka-config
-          configMap:
-            name: kafka-config
+          livenessProbe:
+            tcpSocket:
+              port: 9092
+            initialDelaySeconds: 90
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+          startupProbe:
+            tcpSocket:
+              port: 9092
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 30
   volumeClaimTemplates:
     - metadata:
         name: kafka-data
@@ -168,4 +118,4 @@ spec:
         accessModes: ["ReadWriteOnce"]
         resources:
           requests:
-            storage: 5Gi
+            storage: 10Gi
