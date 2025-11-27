@@ -7,7 +7,7 @@ PROJECT="website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui"
 NAMESPACE="davtrowebdbvault"
 REGISTRY="${REGISTRY:-ghcr.io/exea-centrum/website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui}"
 REPO_URL="${REPO_URL:-https://github.com/exea-centrum/website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui.git}"
-KAFKA_CLUSTER_ID="${KAFKA_CLUSTER_ID:-4mUj5vFk3tW7pY0iH2gR8qL6eD9oB1cZ}"
+KAFKA_CLUSTER_ID="${KAFKA_CLUSTER_ID:-00b0bc82-e1aa-4de0-8530-7dd209a3af28}"
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 APP_DIR="${ROOT_DIR}/app"
