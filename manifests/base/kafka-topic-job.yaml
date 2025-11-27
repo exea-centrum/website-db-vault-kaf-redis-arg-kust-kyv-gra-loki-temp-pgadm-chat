@@ -21,7 +21,7 @@ spec:
     spec:
       containers:
         - name: create-topics
-          image: bitnami/kafka:3.6.1-debian-11-r6
+          image: bitnami/kafka:latest
           command:
             - /bin/bash
             - -c
