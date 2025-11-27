@@ -1805,38 +1805,32 @@ spec:
     spec:
       containers:
       - name: kafka
-        image: confluentinc/cp-kafka:7.5.0
+        image: bitnami/kafka:3.6.1
         env:
-        - name: KAFKA_BROKER_ID
+        - name: KAFKA_CFG_BROKER_ID
           value: "0"
-        - name: KAFKA_PROCESS_ROLES
+        - name: KAFKA_CFG_PROCESS_ROLES
           value: "broker,controller"
-        - name: KAFKA_CONTROLLER_QUORUM_VOTERS
+        - name: KAFKA_CFG_CONTROLLER_QUORUM_VOTERS
           value: "0@kafka-0.kafka.${NAMESPACE}.svc.cluster.local:9093"
-        - name: KAFKA_LISTENERS
+        - name: KAFKA_CFG_LISTENERS
           value: "PLAINTEXT://:9092,CONTROLLER://:9093"
-        - name: KAFKA_ADVERTISED_LISTENERS
+        - name: KAFKA_CFG_ADVERTISED_LISTENERS
           value: "PLAINTEXT://kafka-0.kafka.${NAMESPACE}.svc.cluster.local:9092"
-        - name: KAFKA_LISTENER_SECURITY_PROTOCOL_MAP
+        - name: KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP
           value: "CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT"
-        - name: KAFKA_CONTROLLER_LISTENER_NAMES
+        - name: KAFKA_CFG_CONTROLLER_LISTENER_NAMES
           value: "CONTROLLER"
-        - name: KAFKA_INTER_BROKER_LISTENER_NAME
+        - name: KAFKA_CFG_INTER_BROKER_LISTENER_NAME
           value: "PLAINTEXT"
-        - name: KAFKA_AUTO_CREATE_TOPICS_ENABLE
+        - name: KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE
           value: "true"
-        - name: KAFKA_CLUSTER_ID
-          value: "${KAFKA_CLUSTER_ID}"
-        - name: CLUSTER_ID
-          value: "${KAFKA_CLUSTER_ID}"
-        - name: KAFKA_LOG_DIR
-          value: "/var/lib/kafka/data"
-        - name: KAFKA_LOG_RETENTION_HOURS
+        - name: KAFKA_CFG_LOG_RETENTION_HOURS
           value: "168"
-        - name: KAFKA_LOG_SEGMENT_BYTES
-          value: "1073741824"
-        - name: KAFKA_AUTO_LEADER_REBALANCE_ENABLE
+        - name: KAFKA_CFG_AUTO_LEADER_REBALANCE_ENABLE
           value: "true"
+        - name: KAFKA_CFG_KRAFT_QUORUM_VOTERS
+          value: "0@kafka-0.kafka.${NAMESPACE}.svc.cluster.local:9093"
         ports:
         - containerPort: 9092
           name: client
