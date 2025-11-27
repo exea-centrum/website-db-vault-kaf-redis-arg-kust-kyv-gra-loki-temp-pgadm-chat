@@ -10,6 +10,8 @@ metadata:
     app.kubernetes.io/instance: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
     app.kubernetes.io/component: kafka-topic-job
 spec:
+  backoffLimit: 5
+  ttlSecondsAfterFinished: 3600
   template:
     metadata:
       labels:
@@ -29,7 +31,7 @@ spec:
             - |
               echo "Waiting for Kafka broker to be ready..."
               for i in {1..120}; do
-                if /opt/confluent/bin/kafka-broker-api-versions --bootstrap-server kafka-0.kafka.davtrowebdbvault.svc.cluster.local:9092 &>/dev/null; then
+                if kafka-broker-api-versions --bootstrap-server kafka-0.kafka.davtrowebdbvault.svc.cluster.local:9092 &>/dev/null; then
                   echo "✓ Kafka broker is ready!"
                   exit 0
                 fi
@@ -65,4 +67,3 @@ spec:
 
               echo "✓ Kafka topics created successfully"
       restartPolicy: OnFailure
-  backoffLimit: 5

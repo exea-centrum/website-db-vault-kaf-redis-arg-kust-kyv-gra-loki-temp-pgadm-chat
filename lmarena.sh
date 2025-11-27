@@ -1807,6 +1807,14 @@ spec:
           value: "true"
         - name: KAFKA_CLUSTER_ID
           value: "${KAFKA_CLUSTER_ID}"
+        - name: KAFKA_LOG_DIR
+          value: "/var/lib/kafka/data"
+        - name: KAFKA_LOG_RETENTION_HOURS
+          value: "168"
+        - name: KAFKA_LOG_SEGMENT_BYTES
+          value: "1073741824"
+        - name: KAFKA_AUTO_LEADER_REBALANCE_ENABLE
+          value: "true"
         ports:
         - containerPort: 9092
           name: client
