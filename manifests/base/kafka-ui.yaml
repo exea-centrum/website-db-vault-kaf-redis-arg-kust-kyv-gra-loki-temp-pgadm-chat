@@ -24,24 +24,6 @@ spec:
         app.kubernetes.io/instance: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
         app.kubernetes.io/component: kafka-ui
     spec:
-      initContainers:
-        - name: wait-for-kafka
-          image: apache/kafka:4.1.0
-          command:
-            - /bin/sh
-            - -c
-            - |
-              echo "Waiting for Kafka broker..."
-              for i in $(seq 1 120); do
-                if /opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server kafka.davtrowebdbvault.svc.cluster.local:9092 >/dev/null 2>&1; then
-                  echo "✓ Kafka broker is ready!"
-                  exit 0
-                fi
-                echo "Attempt $i/120: Kafka not ready..."
-                sleep 5
-              done
-              echo "✗ Kafka broker failed to start"
-              exit 1
       containers:
         - name: kafka-ui
           image: provectuslabs/kafka-ui:latest
