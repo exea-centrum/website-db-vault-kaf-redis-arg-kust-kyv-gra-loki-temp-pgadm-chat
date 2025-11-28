@@ -52,15 +52,15 @@ spec:
     spec:
       initContainers:
         - name: wait-for-postgres
-          image: busybox:1.35
+          image: postgres:15-alpine
           command:
-            - "sh"
-            - "-c"
+            - sh
+            - -c
             - |
               echo "Waiting for PostgreSQL to be ready..."
-              until nc -z postgres-db 5432; do
+              until pg_isready -h postgres-db -p 5432 -U webuser; do
                 echo "Waiting for PostgreSQL..."
-                sleep 10
+                sleep 5
               done
               echo "PostgreSQL is ready!"
       containers:

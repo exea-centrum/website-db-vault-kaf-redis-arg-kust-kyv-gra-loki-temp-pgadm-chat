@@ -26,14 +26,14 @@ spec:
     spec:
       initContainers:
         - name: wait-for-kafka
-          image: provectuslabs/kafka-ui:latest
+          image: apache/kafka:4.1.0
           command:
-            - /bin/bash
+            - /bin/sh
             - -c
             - |
               echo "Waiting for Kafka broker..."
-              for i in {1..120}; do
-                if /opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server kafka-0.kafka.davtrowebdbvault.svc.cluster.local:9092 &>/dev/null; then
+              for i in $(seq 1 120); do
+                if /opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server kafka-0.kafka.davtrowebdbvault.svc.cluster.local:9092 >/dev/null 2>&1; then
                   echo "✓ Kafka broker is ready!"
                   exit 0
                 fi
