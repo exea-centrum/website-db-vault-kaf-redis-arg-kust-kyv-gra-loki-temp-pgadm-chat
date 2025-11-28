@@ -59,7 +59,7 @@ spec:
             - |
               echo "Waiting for Kafka broker..."
               for i in {1..120}; do
-                if /opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server kafka-0.kafka.davtrowebdbvault.svc.cluster.local:9092 &>/dev/null; then
+                if /opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server kafka.davtrowebdbvault.svc.cluster.local:9092 &>/dev/null; then
                   echo "✓ Kafka broker is ready!"
                   break
                 fi
@@ -74,7 +74,7 @@ spec:
             - |
               echo "Waiting for Kafka topics..."
               for i in {1..120}; do
-                if /opt/kafka/bin/kafka-topics.sh --list --bootstrap-server kafka-0.kafka.davtrowebdbvault.svc.cluster.local:9092 2>/dev/null | grep -q "^survey-topic$"; then
+                if /opt/kafka/bin/kafka-topics.sh --list --bootstrap-server kafka.davtrowebdbvault.svc.cluster.local:9092 2>/dev/null | grep -q "^survey-topic$"; then
                   echo "✓ survey-topic exists"
                   break
                 fi
