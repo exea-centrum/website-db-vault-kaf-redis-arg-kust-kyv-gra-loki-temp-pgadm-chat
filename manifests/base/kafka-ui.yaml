@@ -26,7 +26,7 @@ spec:
     spec:
       initContainers:
         - name: wait-for-kafka
-          image: apache/kafka:4.1.0
+          image: provectuslabs/kafka-ui:latest
           command:
             - /bin/bash
             - -c
