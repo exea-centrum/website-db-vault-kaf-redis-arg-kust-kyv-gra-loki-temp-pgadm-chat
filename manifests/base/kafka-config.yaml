@@ -1,0 +1,50 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kafka-config
+  namespace: davtrowebdbvault
+  labels:
+    app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
+    app.kubernetes.io/name: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
+    app.kubernetes.io/instance: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
+data:
+  server.properties: |
+    # Kafka KRaft Mode Configuration
+    process.roles=broker,controller
+    node.id=0
+    controller.quorum.voters=0@kafka-0.kafka.davtrowebdbvault.svc.cluster.local:9093
+
+    # Listeners
+    listeners=PLAINTEXT://:9092,CONTROLLER://:9093
+    advertised.listeners=PLAINTEXT://kafka.davtrowebdbvault.svc.cluster.local:9092
+    inter.broker.listener.name=PLAINTEXT
+    listener.security.protocol.map=CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+    controller.listener.names=CONTROLLER
+
+    # Network Settings
+    num.network.threads=3
+    num.io.threads=8
+    socket.send.buffer.bytes=102400
+    socket.receive.buffer.bytes=102400
+    socket.request.max.bytes=104857600
+
+    # Log Settings
+    log.dirs=/tmp/kafka-logs
+    num.partitions=1
+    num.recovery.threads.per.data.dir=1
+
+    # Internal Topics
+    offsets.topic.replication.factor=1
+    transaction.state.log.replication.factor=1
+    transaction.state.log.min.isr=1
+
+    # Retention Policy
+    log.retention.hours=168
+    log.segment.bytes=1073741824
+    log.retention.check.interval.ms=300000
+
+    # Auto-create topics
+    auto.create.topics.enable=true
+
+    # Group Coordinator
+    group.initial.rebalance.delay.ms=0

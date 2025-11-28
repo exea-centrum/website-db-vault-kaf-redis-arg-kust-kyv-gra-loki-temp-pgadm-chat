@@ -1805,7 +1805,7 @@ spec:
     spec:
       containers:
       - name: kafka
-        image: confluentinc/cp-kafka:7.5.0
+        image: docker.io/confluentinc/cp-kafka:latest
         env:
         - name: KAFKA_BROKER_ID
           value: "0"
