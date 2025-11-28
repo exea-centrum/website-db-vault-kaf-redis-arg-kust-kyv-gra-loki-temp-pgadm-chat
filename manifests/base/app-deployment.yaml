@@ -52,14 +52,14 @@ spec:
               done
               echo "Redis is ready!"
         - name: wait-for-kafka
-          image: confluentinc/cp-kafka:7.5.0
+          image: apache/kafka:4.1.0
           command:
             - /bin/bash
             - -c
             - |
               echo "Waiting for Kafka broker..."
               for i in {1..120}; do
-                if kafka-broker-api-versions --bootstrap-server kafka-0.kafka.davtrowebdbvault.svc.cluster.local:9092 &>/dev/null; then
+                if /opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server kafka-0.kafka.davtrowebdbvault.svc.cluster.local:9092 &>/dev/null; then
                   echo "✓ Kafka broker is ready!"
                   break
                 fi
@@ -67,14 +67,14 @@ spec:
                 sleep 5
               done
         - name: wait-for-kafka-topics
-          image: confluentinc/cp-kafka:7.5.0
+          image: apache/kafka:4.1.0
           command:
             - /bin/bash
             - -c
             - |
               echo "Waiting for Kafka topics..."
               for i in {1..120}; do
-                if kafka-topics --list --bootstrap-server kafka-0.kafka.davtrowebdbvault.svc.cluster.local:9092 2>/dev/null | grep -q "^survey-topic$"; then
+                if /opt/kafka/bin/kafka-topics.sh --list --bootstrap-server kafka-0.kafka.davtrowebdbvault.svc.cluster.local:9092 2>/dev/null | grep -q "^survey-topic$"; then
                   echo "✓ survey-topic exists"
                   break
                 fi

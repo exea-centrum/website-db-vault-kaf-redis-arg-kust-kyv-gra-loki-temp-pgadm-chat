@@ -33,7 +33,7 @@ spec:
             - |
               echo "Waiting for Kafka broker..."
               for i in {1..120}; do
-                if /opt/bitnami/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server kafka-0.kafka.davtrowebdbvault.svc.cluster.local:9092 &>/dev/null; then
+                if /opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server kafka-0.kafka.davtrowebdbvault.svc.cluster.local:9092 &>/dev/null; then
                   echo "✓ Kafka broker is ready!"
                   exit 0
                 fi

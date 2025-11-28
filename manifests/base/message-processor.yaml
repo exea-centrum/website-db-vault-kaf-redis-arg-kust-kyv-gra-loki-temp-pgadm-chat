@@ -55,12 +55,12 @@ spec:
               'until nc -z kafka-0.kafka.davtrowebdbvault.svc.cluster.local 9092; do echo "waiting for kafka..."; sleep 10; done; echo "kafka ready"',
             ]
         - name: wait-for-kafka-topics
-          image: bitnami/kafka:3.6.1
+          image: apache/kafka:4.1.0
           command:
             [
               "/bin/bash",
               "-c",
-              'for i in {1..120}; do if /opt/bitnami/kafka/bin/kafka-topics.sh --list --bootstrap-server kafka-0.kafka.davtrowebdbvault.svc.cluster.local:9092 2>/dev/null | grep -q "^survey-topic$"; then echo "✓ survey-topic ready"; break; fi; echo "Attempt $i/120: survey-topic not ready..."; sleep 5; done',
+              'for i in {1..120}; do if /opt/kafka/bin/kafka-topics.sh --list --bootstrap-server kafka-0.kafka.davtrowebdbvault.svc.cluster.local:9092 2>/dev/null | grep -q "^survey-topic$"; then echo "✓ survey-topic ready"; break; fi; echo "Attempt $i/120: survey-topic not ready..."; sleep 5; done',
             ]
       containers:
         - name: worker
