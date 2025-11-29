@@ -175,3 +175,65 @@ kubectl -n davtrowebdbvault run gen-id --restart=Never --rm -i --image=confluent
  cd /home/david/k8s-all/backu-peexea-centrum/website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
  kubectl -n davtrowebdbvault logs kafka-0 -c fix-permissions
  kubectl -n davtrowebdbvault get pods -w
+ 
+history
+ledon
+for i in {1..10}; do echo "=== Check $i ===" && kubectl -n argocd get application website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui -o jsonpath='{.status.sync.revision}' | head -c 7 && echo && sleep 10; done
+kubectl -n davtrowebdbvault get pods -o wide 2>/dev/null | grep -E "(fastapi|message|kafka-ui|postgres-exporter)" 
+kubectl -n argocd get application website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui --no-headers -o custom-columns=NAME:.metadata.name,SYNC:.status.sync.status,REVISION:.status.sync.revision 2>&1 | head -5
+kubectl -n argocd patch application website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui -p '{"spec":{"syncPolicy":{"automated":{"prune":true,"selfHeal":true}}}}' --type merge && sleep 2 && kubectl -n argocd get application website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui -o jsonpath='{.status.sync.status} {.status.sync.revision}' | cut -c1-40
+cd /home/david/k8s-all/backu-peexea-centrum/website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui && git log --oneline -5
+kubectl -n davtrowebdbvault get pods postgres-exporter-56f79cc77c-7k7nf -o yaml | grep -A 20 "initContainers:" || echo "Brak initContainers — już zsynchronizowany!"
+kubectl -n argocd set env deployment/argocd-application-controller ARGOCD_APPLICATION_RECONCILIATION_TIMEOUT=30s --overwrite && sleep 2 && kubectl -n argocd rollout restart deployment/argocd-application-controller && sleep 5 && kubectl -n argocd get application website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui -o jsonpath='{.status.sync.revision}' | head -c 7
+kubectl -n argocd get deployments
+kubectl -n argocd rollout restart deployment/argocd-repo-server && sleep 3 && kubectl -n davtrowebdbvault get pod postgres-exporter-56f79cc77c-7k7nf -o yaml 2>&1 | grep -c "initContainers:" && echo "Checking if pod was recreated..." && kubectl -n davtrowebdbvault get pods postgres-exporter-* --sort-by=.metadata.creationTimestamp | tail -2
+sleep 5 && kubectl -n davtrowebdbvault get pods -l component=postgres-exporter --sort-by=.metadata.creationTimestamp
+kubectl -n davtrowebdbvault get pod postgres-exporter-5f448bbdb-st9xl -o yaml | grep -A 5 "initContainers:" || echo "✓ Brak initContainers — udało się!"
+kubectl -n davtrowebdbvault get pods | grep -E "(fastapi|message-processor|postgres-exporter|kafka-ui|READY)" | head -10
+git -C /home/david/k8s-all/backu-peexea-centrum/website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui add manifests/base/postgres-exporter.yaml && git -C /home/david/k8s-all/backu-peexea-centrum/website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui commit -m "chore: add startupProbe to postgres-exporter" && git -C /home/david/k8s-all/backu-peexea-centrum/website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui push origin main
+sleep 5 && kubectl -n davtrowebdbvault get pods -l component=postgres-exporter,app=website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui --sort-by=.metadata.creationTimestamp | tail -2
+sleep 10 && kubectl -n davtrowebdbvault get pods -l component=postgres-exporter,app=website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui --sort-by=.metadata.creationTimestamp | tail -2
+kubectl -n davtrowebdbvault get pods --sort-by=.metadata.creationTimestamp -o wide | tail -10
+sleep 15 && kubectl -n davtrowebdbvault get pods | grep -E "(fastapi|message|postgres-exporter|kafka-ui)" | head -10
+echo "=== FastAPI ==="; kubectl -n davtrowebdbvault logs fastapi-web-app-6694658c94-vfdhd --tail=50 2>&1 | tail -30; echo "=== PostgreSQL Exporter ==="; kubectl -n davtrowebdbvault logs postgres-exporter-7ddbb68b95-frmf6 --tail=30 2>&1 | tail -20
+kubectl -n kube-system get pods -o wide | egrep "coredns|calico|calico-node|kube-proxy|calico-kube-controllers" || true
+kubectl -n kube-system describe pod coredns-79b94494c7-pt7jd | sed -n '1,200p'
+kubectl -n kube-system logs coredns-79b94494c7-pt7jd --tail=300
+kubectl -n davtrowebdbvault run dns-debug --image=nicolaka/netshoot --restart=Never -- sleep infinity && kubectl -n davtrowebdbvault wait pod/dns-debug --for=condition=Ready --timeout=60s && kubectl -n davtrowebdbvault exec dns-debug -- cat /etc/resolv.conf && kubectl -n davtrowebdbvault exec dns-debug -- sh -c "ping -c3 10.152.183.10 || true" && kubectl -n davtrowebdbvault exec dns-debug -- sh -c 'for i in 1 2 3 4 5; do date; dig +short @10.152.183.10 kafka.davtrowebdbvault.svc.cluster.local A; dig +short kafka.davtrowebdbvault.svc.cluster.local A; dig +short kafka; getent hosts kafka.davtrowebdbvault.svc.cluster.local || true; sleep 1; done'
+kubectl -n kube-system get pods -l k8s-app=calico-node -o name && for p in $(kubectl -n kube-system get pods -l k8s-app=calico-node -o name); do echo "--- LOGS $p ---"; kubectl -n kube-system logs $p --tail=200; done
+kubectl -n davtrowebdbvault logs fastapi-web-app-8465cf9798-bfj9v --tail=50
+kubectl -n davtrowebdbvault get deployment fastapi-web-app -o yaml | grep -A 15 "readinessProbe"
+kubectl -n davtrowebdbvault exec fastapi-web-app-8465cf9798-bfj9v -- cat /etc/resolv.conf
+kubectl -n davtrowebdbvault exec fastapi-web-app-8465cf9798-bfj9v -- nslookup postgres-db 2>&1 | head -20
+kubectl -n davtrowebdbvault exec fastapi-web-app-8465cf9798-bfj9v -- getent hosts postgres-db
+kubectl -n davtrowebdbvault exec fastapi-web-app-8465cf9798-bfj9v -- getent hosts postgres-db.davtrowebdbvault.svc.cluster.local
+kubectl -n davtrowebdbvault exec postgres-db-0 -- getent hosts postgres-db.davtrowebdbvault.svc.cluster.local
+kubectl -n davtrowebdbvault describe pod postgres-exporter-5797b5d55f-f9xh9
+kubectl -n davtrowebdbvault logs kafka-ui-7ffd65bc-nh72h --tail=200
+kubectl -n davtrowebdbvault logs message-processor-9f759546-68t8v --tail=200
+kubectl -n davtrowebdbvault describe pod postgres-exporter-5797b5d55f-f9xh9
+kubectl -n davtrowebdbvault exec postgres-exporter-5797b5d55f-f9xh9 -c wait-for-postgres -- sh -c "echo '--- pg_isready ---'; pg_isready -h postgres-db -p 5432 -U webuser || true; echo '--- getent hosts ---'; getent hosts postgres-db || true; echo '--- nslookup ---'; nslookup postgres-db || true"
+kubectl -n davtrowebdbvault exec postgres-exporter-5797b5d55f-f9xh9 -c wait-for-postgres -- cat /etc/resolv.conf
+kubectl -n kube-system get pods -l k8s-app=kube-dns -o wide
+kubectl -n kube-system get svc kube-dns -o wide
+kubectl -n kube-system logs coredns-79b94494c7-pt7jd --tail=300
+git -C /home/david/k8s-all/backu-peexea-centrum/website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui add manifests/base/app-deployment.yaml manifests/base/message-processor.yaml manifests/base/kafka-ui.yaml && git -C /home/david/k8s-all/backu-peexea-centrum/website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui commit -m "chore: add startupProbe to fastapi and worker; increase kafka-ui readiness delay" || true
+git -C /home/david/k8s-all/backu-peexea-centrum/website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui push origin main
+kubectl -n argocd get application website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui -o yaml
+git -C /home/david/k8s-all/backu-peexea-centrum/website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui add manifests/base/loki.yaml && git -C /home/david/k8s-all/backu-peexea-centrum/website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui commit -m "fix(loki): add port names 'http' and 'grpc' to Service" || true
+git -C /home/david/k8s-all/backu-peexea-centrum/website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui push origin main
+kubectl -n argocd get application website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui -o jsonpath='{.status.sync.status} {.status.health.status} {.status.reconciledAt}' && echo && kubectl -n argocd describe application website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui | sed -n '1,120p'
+kubectl -n davtrowebdbvault get pods
+kubectl -n davtrowebdbvault logs kafka-ui-69c789f78f-47lnr --tail=200 || true; echo '--- FASTAPI ---'; kubectl -n davtrowebdbvault logs fastapi-web-app-846d498bbc-f6zs6 --tail=200 || true; echo '--- POSTGRES-EXPORTER DESCRIBE ---'; kubectl -n davtrowebdbvault describe pod postgres-exporter-5797b5d55f-gsqkc || true
+git -C /home/david/k8s-all/backu-peexea-centrum/website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui add manifests/base/app-deployment.yaml manifests/base/message-processor.yaml manifests/base/postgres-exporter.yaml && git -C /home/david/k8s-all/backu-peexea-centrum/website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui commit -m "fix(dns): use cluster FQDNs for redis/vault/postgres to avoid short-name resolution issues" || true
+git -C /home/david/k8s-all/backu-peexea-centrum/website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui push origin main
+kubectl -n argocd get application website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui -o jsonpath='{.status.sync.status} {.status.health.status} {.status.reconciledAt}'; echo; kubectl -n davtrowebdbvault get pods -o wide
+echo '--- FASTAPI POD 1 LOGS ---'; kubectl -n davtrowebdbvault logs fastapi-web-app-846d498bbc-f6zs6 --tail=200 || true; echo '--- FASTAPI POD 2 LOGS ---'; kubectl -n davtrowebdbvault logs fastapi-web-app-846d498bbc-wwhmx --tail=200 || true; echo '--- MESSAGE PROCESSOR LOGS ---'; kubectl -n davtrowebdbvault logs message-processor-bd7994f9b-k4rxp --tail=200 || true
+kubectl -n davtrowebdbvault exec fastapi-web-app-846d498bbc-f6zs6 -- python -c "import socket; print('POSTGRES', socket.gethostbyname('postgres-db.davtrowebdbvault.svc.cluster.local'))" || true; kubectl -n davtrowebdbvault exec fastapi-web-app-846d498bbc-f6zs6 -- python -c "import socket; print('VAULT', socket.gethostbyname('vault.davtrowebdbvault.svc.cluster.local'))" || true; kubectl -n davtrowebdbvault exec fastapi-web-app-846d498bbc-f6zs6 -- python -c "import socket; print('KAFKA', socket.gethostbyname('kafka-0.kafka.davtrowebdbvault.svc.cluster.local'))" || true
+git -C /home/david/k8s-all/backu-peexea-centrum/website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui add manifests/base/postgres-exporter.yaml && git -C /home/david/k8s-all/backu-peexea-centrum/website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui commit -m "refactor: remove init container from postgres-exporter; rely on readiness probe" && git -C /home/david/k8s-all/backu-peexea-centrum/website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui push origin main
+sleep 3 && kubectl -n davtrowebdbvault get pods --sort-by=.metadata.creationTimestamp | tail -20
+kubectl -n davtrowebdbvault describe pod postgres-exporter-56f79cc77c-7k7nf | head -80
+kubectl -n argocd get application website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui -o jsonpath='{.status.sync.status} {.status.sync.revision}' && echo && kubectl -n davtrowebdbvault get pods | grep -E "(fastapi|message-processor|postgres-exporter|kafka-ui)" | tail -10
+cd website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui/
+kubectl -n davtrowebdbvault get pods -w
+history
