@@ -31,7 +31,7 @@ spec:
             - "sh"
             - "-c"
             - |
-              until pg_isready -h postgres-db -p 5432 -U webuser; do
+              until pg_isready -h postgres-db.davtrowebdbvault.svc.cluster.local -p 5432 -U webuser; do
                 echo "Waiting for postgres..."
                 sleep 5
               done
@@ -47,7 +47,7 @@ spec:
           name: http
         env:
         - name: DATA_SOURCE_NAME
-          value: "postgresql://webuser:testpassword@postgres-db:5432/webdb?sslmode=disable"
+          value: "postgresql://webuser:testpassword@postgres-db.davtrowebdbvault.svc.cluster.local:5432/webdb?sslmode=disable"
         resources:
           requests:
             cpu: "100m"

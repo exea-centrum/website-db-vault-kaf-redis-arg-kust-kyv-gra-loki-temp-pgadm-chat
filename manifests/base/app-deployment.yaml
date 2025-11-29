@@ -33,7 +33,7 @@ spec:
             - containerPort: 8000
           env:
             - name: REDIS_HOST
-              value: redis
+              value: redis.davtrowebdbvault.svc.cluster.local
             - name: REDIS_PORT
               value: "6379"
             - name: REDIS_LIST
@@ -43,11 +43,11 @@ spec:
             - name: KAFKA_TOPIC
               value: survey-topic
             - name: VAULT_ADDR
-              value: http://vault:8200
+              value: http://vault.davtrowebdbvault.svc.cluster.local:8200
             - name: VAULT_TOKEN
               value: root
             - name: DATABASE_URL
-              value: "dbname=webdb user=webuser password=testpassword host=postgres-db port=5432"
+              value: "dbname=webdb user=webuser password=testpassword host=postgres-db.davtrowebdbvault.svc.cluster.local port=5432"
             - name: PYTHONUNBUFFERED
               value: "1"
           resources:
