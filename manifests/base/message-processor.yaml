@@ -68,3 +68,12 @@ spec:
                 - 'python -c "import redis; redis.Redis(host=\"redis\", port=6379, socket_connect_timeout=5).ping()"'
             initialDelaySeconds: 30
             periodSeconds: 10
+          startupProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - 'python -c "import redis; redis.Redis(host=\"redis\", port=6379, socket_connect_timeout=5).ping()"'
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            failureThreshold: 30
