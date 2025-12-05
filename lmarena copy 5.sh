@@ -15,22 +15,22 @@ MANIFESTS_DIR="${ROOT_DIR}/manifests"
 BASE_DIR="${MANIFESTS_DIR}/base"
 WORKFLOW_DIR="${ROOT_DIR}/.github/workflows"
 
-info(){ printf "🔧 [unified] %s\n" "$*"; }
-mkdir_p(){ mkdir -p "$@"; }
+info() { printf "🔧 [unified] %s\n" "$*"; }
+mkdir_p() { mkdir -p "$@"; }
 
-generate_structure(){
- info "Creating directories..."
- mkdir_p "$APP_DIR" "$TEMPLATES_DIR" "$BASE_DIR" "$WORKFLOW_DIR" "${APP_DIR}/static"
+generate_structure() {
+    info "Creating directories..."
+    mkdir_p "$APP_DIR" "$TEMPLATES_DIR" "$BASE_DIR" "$WORKFLOW_DIR" "${APP_DIR}/static"
 }
 
-generate_fastapi_app(){
- info "Generating FastAPI app with survey system..."
+generate_fastapi_app() {
+    info "Generating FastAPI app with survey system..."
 
- cat > "${APP_DIR}/__init__.py" <<'PY'
+    cat >"${APP_DIR}/__init__.py" <<'PY'
 # FastAPI Application Package
 PY
 
- cat > "${APP_DIR}/main.py" <<'PY'
+    cat >"${APP_DIR}/main.py" <<'PY'
 from fastapi import FastAPI, Form, Request, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
@@ -344,7 +344,7 @@ if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
 PY
 
- cat > "${APP_DIR}/worker.py" <<'PY'
+    cat >"${APP_DIR}/worker.py" <<'PY'
 #!/usr/bin/env python3
 import os, json, time, logging
 import redis
@@ -513,7 +513,7 @@ if __name__ == "__main__":
     main()
 PY
 
- cat > "${TEMPLATES_DIR}/index.html" <<'HTML'
+    cat >"${TEMPLATES_DIR}/index.html" <<'HTML'
 <!DOCTYPE html>
 <html lang="pl">
 <head>
@@ -818,7 +818,7 @@ PY
 </html>
 HTML
 
- cat > "${APP_DIR}/requirements.txt" <<'REQ'
+    cat >"${APP_DIR}/requirements.txt" <<'REQ'
 fastapi==0.104.1
 uvicorn==0.24.0
 jinja2==3.1.2
@@ -832,13 +832,13 @@ hvac==1.1.0
 redis==4.6.0
 REQ
 
- chmod +x "${APP_DIR}/worker.py"
- info "FastAPI app with survey system generated."
+    chmod +x "${APP_DIR}/worker.py"
+    info "FastAPI app with survey system generated."
 }
 
-generate_dockerfile(){
- info "Generating Dockerfile..."
- cat > "${ROOT_DIR}/Dockerfile" <<'DOCK'
+generate_dockerfile() {
+    info "Generating Dockerfile..."
+    cat >"${ROOT_DIR}/Dockerfile" <<'DOCK'
 FROM python:3.11-slim-bullseye
 WORKDIR /app
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
@@ -850,10 +850,10 @@ CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
 DOCK
 }
 
-generate_github_actions(){
- info "Writing GitHub Actions workflow..."
- mkdir_p "$WORKFLOW_DIR"
- cat > "${WORKFLOW_DIR}/ci-cd.yaml" <<'YAML'
+generate_github_actions() {
+    info "Writing GitHub Actions workflow..."
+    mkdir_p "$WORKFLOW_DIR"
+    cat >"${WORKFLOW_DIR}/ci-cd.yaml" <<'YAML'
 name: CI/CD Build & Deploy
 
 on:
@@ -883,7 +883,7 @@ jobs:
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
-          password: ${{ secrets.GHCR_PAT }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push image
         uses: docker/build-push-action@v6
@@ -898,10 +898,10 @@ jobs:
 YAML
 }
 
-generate_k8s_manifests(){
- info "Generating ALL Kubernetes manifests..."
+generate_k8s_manifests() {
+    info "Generating ALL Kubernetes manifests..."
 
- cat > "${BASE_DIR}/fastapi-config.yaml" <<YAML
+    cat >"${BASE_DIR}/fastapi-config.yaml" <<YAML
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -919,7 +919,7 @@ data:
   PYTHONUNBUFFERED: "1"
 YAML
 
- cat > "${BASE_DIR}/app-deployment.yaml" <<YAML
+    cat >"${BASE_DIR}/app-deployment.yaml" <<YAML
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -1055,7 +1055,7 @@ metadata:
     app.kubernetes.io/instance: ${PROJECT}
 YAML
 
- cat > "${BASE_DIR}/message-processor.yaml" <<YAML
+    cat >"${BASE_DIR}/message-processor.yaml" <<YAML
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -1158,7 +1158,7 @@ spec:
           periodSeconds: 10
 YAML
 
- cat > "${BASE_DIR}/postgres-db.yaml" <<YAML
+    cat >"${BASE_DIR}/postgres-db.yaml" <<YAML
 apiVersion: v1
 kind: Service
 metadata:
@@ -1256,7 +1256,7 @@ spec:
           storage: 10Gi
 YAML
 
- cat > "${BASE_DIR}/pgadmin.yaml" <<YAML
+    cat >"${BASE_DIR}/pgadmin.yaml" <<YAML
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -1408,7 +1408,7 @@ spec:
       storage: 2Gi
 YAML
 
- cat > "${BASE_DIR}/vault.yaml" <<YAML
+    cat >"${BASE_DIR}/vault.yaml" <<YAML
 apiVersion: v1
 kind: Service
 metadata:
@@ -1503,7 +1503,7 @@ metadata:
     app.kubernetes.io/instance: ${PROJECT}
 YAML
 
- cat > "${BASE_DIR}/vault-secrets.yaml" <<YAML
+    cat >"${BASE_DIR}/vault-secrets.yaml" <<YAML
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -1545,7 +1545,7 @@ data:
     echo "Vault initialization completed"
 YAML
 
- cat > "${BASE_DIR}/vault-job.yaml" <<YAML
+    cat >"${BASE_DIR}/vault-job.yaml" <<YAML
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -1589,7 +1589,7 @@ spec:
   backoffLimit: 3
 YAML
 
- cat > "${BASE_DIR}/redis.yaml" <<YAML
+    cat >"${BASE_DIR}/redis.yaml" <<YAML
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -1661,7 +1661,7 @@ spec:
     component: redis
 YAML
 
- cat > "${BASE_DIR}/kafka-kraft.yaml" <<YAML
+    cat >"${BASE_DIR}/kafka-kraft.yaml" <<YAML
 apiVersion: v1
 kind: Service
 metadata:
@@ -1774,7 +1774,7 @@ spec:
           storage: 10Gi
 YAML
 
- cat > "${BASE_DIR}/kafka-topic-job.yaml" <<YAML
+    cat >"${BASE_DIR}/kafka-topic-job.yaml" <<YAML
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -1844,7 +1844,7 @@ spec:
       restartPolicy: OnFailure
 YAML
 
- cat > "${BASE_DIR}/kafka-job-sa.yaml" <<YAML
+    cat >"${BASE_DIR}/kafka-job-sa.yaml" <<YAML
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -1857,7 +1857,7 @@ metadata:
     app.kubernetes.io/instance: ${PROJECT}
 YAML
 
- cat > "${BASE_DIR}/kafka-ui.yaml" <<YAML
+    cat >"${BASE_DIR}/kafka-ui.yaml" <<YAML
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -1957,7 +1957,7 @@ spec:
     component: kafka-ui
 YAML
 
- cat > "${BASE_DIR}/prometheus-config.yaml" <<YAML
+    cat >"${BASE_DIR}/prometheus-config.yaml" <<YAML
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -2013,7 +2013,7 @@ data:
         scrape_interval: 30s
 YAML
 
- cat > "${BASE_DIR}/postgres-exporter.yaml" <<YAML
+    cat >"${BASE_DIR}/postgres-exporter.yaml" <<YAML
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -2106,7 +2106,7 @@ spec:
     component: postgres-exporter
 YAML
 
- cat > "${BASE_DIR}/kafka-exporter.yaml" <<YAML
+    cat >"${BASE_DIR}/kafka-exporter.yaml" <<YAML
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -2203,7 +2203,7 @@ spec:
     component: kafka-exporter
 YAML
 
- cat > "${BASE_DIR}/node-exporter.yaml" <<YAML
+    cat >"${BASE_DIR}/node-exporter.yaml" <<YAML
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:
@@ -2294,7 +2294,7 @@ spec:
   clusterIP: None
 YAML
 
- cat > "${BASE_DIR}/service-monitors.yaml" <<YAML
+    cat >"${BASE_DIR}/service-monitors.yaml" <<YAML
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
@@ -2391,7 +2391,7 @@ spec:
     interval: 30s
 YAML
 
- cat > "${BASE_DIR}/prometheus.yaml" <<YAML
+    cat >"${BASE_DIR}/prometheus.yaml" <<YAML
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -2487,7 +2487,7 @@ spec:
       storage: 20Gi
 YAML
 
- cat > "${BASE_DIR}/grafana-datasource.yaml" <<YAML
+    cat >"${BASE_DIR}/grafana-datasource.yaml" <<YAML
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -2528,7 +2528,7 @@ data:
         sslmode: "disable"
 YAML
 
- cat > "${BASE_DIR}/grafana-dashboards.yaml" <<YAML
+    cat >"${BASE_DIR}/grafana-dashboards.yaml" <<YAML
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -2668,7 +2668,7 @@ data:
     }
 YAML
 
- cat > "${BASE_DIR}/grafana.yaml" <<YAML
+    cat >"${BASE_DIR}/grafana.yaml" <<YAML
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -2808,7 +2808,7 @@ data:
         path: /var/lib/grafana/dashboards
 YAML
 
- cat > "${BASE_DIR}/loki-config.yaml" <<YAML
+    cat >"${BASE_DIR}/loki-config.yaml" <<YAML
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -2855,7 +2855,7 @@ data:
       reporting_enabled: false
 YAML
 
- cat > "${BASE_DIR}/loki.yaml" <<YAML
+    cat >"${BASE_DIR}/loki.yaml" <<YAML
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -2951,7 +2951,7 @@ spec:
       storage: 10Gi
 YAML
 
- cat > "${BASE_DIR}/promtail-config.yaml" <<YAML
+    cat >"${BASE_DIR}/promtail-config.yaml" <<YAML
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -3015,7 +3015,7 @@ data:
           __path__: /var/log/containers/*.log
 YAML
 
- cat > "${BASE_DIR}/promtail.yaml" <<YAML
+    cat >"${BASE_DIR}/promtail.yaml" <<YAML
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:
@@ -3121,7 +3121,7 @@ subjects:
   namespace: ${NAMESPACE}
 YAML
 
- cat > "${BASE_DIR}/tempo-config.yaml" <<YAML
+    cat >"${BASE_DIR}/tempo-config.yaml" <<YAML
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -3156,7 +3156,7 @@ data:
       max_block_duration: 5m
 YAML
 
- cat > "${BASE_DIR}/tempo.yaml" <<YAML
+    cat >"${BASE_DIR}/tempo.yaml" <<YAML
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -3242,7 +3242,7 @@ spec:
     component: tempo
 YAML
 
- cat > "${BASE_DIR}/network-policies.yaml" <<YAML
+    cat >"${BASE_DIR}/network-policies.yaml" <<YAML
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -3420,7 +3420,7 @@ spec:
       port: 9092
 YAML
 
- cat > "${BASE_DIR}/ingress.yaml" <<YAML
+    cat >"${BASE_DIR}/ingress.yaml" <<YAML
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -3478,7 +3478,7 @@ spec:
               number: 8080
 YAML
 
- cat > "${BASE_DIR}/kyverno-policy.yaml" <<YAML
+    cat >"${BASE_DIR}/kyverno-policy.yaml" <<YAML
 apiVersion: kyverno.io/v1
 kind: ClusterPolicy
 metadata:
@@ -3510,7 +3510,7 @@ spec:
                 cpu: "?*"
 YAML
 
- cat > "${BASE_DIR}/kustomization.yaml" <<YAML
+    cat >"${BASE_DIR}/kustomization.yaml" <<YAML
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 namespace: ${NAMESPACE}
@@ -3556,7 +3556,7 @@ labels:
       app.kubernetes.io/managed-by: kustomize
 YAML
 
- cat > "${ROOT_DIR}/argocd-application.yaml" <<YAML
+    cat >"${ROOT_DIR}/argocd-application.yaml" <<YAML
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
@@ -3577,12 +3577,12 @@ spec:
       selfHeal: true
 YAML
 
- info "All Kubernetes manifests written to ${BASE_DIR}."
+    info "All Kubernetes manifests written to ${BASE_DIR}."
 }
 
-generate_readme(){
- info "Generating README.md..."
- cat > "${ROOT_DIR}/README.md" <<README
+generate_readme() {
+    info "Generating README.md..."
+    cat >"${ROOT_DIR}/README.md" <<README
 # ${PROJECT} - Complete Monitoring Stack
 
 ## 🛠️ Quick Start
@@ -3644,38 +3644,38 @@ kubectl wait --for=condition=complete job/vault-init -n ${NAMESPACE}
 README
 }
 
-generate_all(){
- info "Starting complete generation..."
- generate_structure
- generate_fastapi_app
- generate_dockerfile
- generate_github_actions
- generate_k8s_manifests
- generate_readme
- echo
- info "✅ Generation complete!"
- echo "📁 Structure:"
- echo "   📁 app/ - FastAPI application with Vault integration"
- echo "   📁 manifests/base/ - ALL Kubernetes manifests"
- echo "   📄 Dockerfile - Container definition"
- echo "   📄 .github/workflows/ci-cd.yaml - GitHub Actions"
- echo "   📄 README.md - Complete documentation"
- echo
- echo "🚀 Next steps:"
- echo "1. Deploy: kubectl apply -k manifests/base"
- echo "2. Check: kubectl get pods -n ${NAMESPACE}"
- echo "3. Access: http://app.${PROJECT}.local"
- echo "4. Monitor: http://grafana.${PROJECT}.local (admin/admin)"
- echo "5. Manage DB: http://pgadmin.${PROJECT}.local (admin@example.com/adminpassword)"
- echo "6. View Kafka: http://kafka-ui.${PROJECT}.local"
+generate_all() {
+    info "Starting complete generation..."
+    generate_structure
+    generate_fastapi_app
+    generate_dockerfile
+    generate_github_actions
+    generate_k8s_manifests
+    generate_readme
+    echo
+    info "✅ Generation complete!"
+    echo "📁 Structure:"
+    echo "   📁 app/ - FastAPI application with Vault integration"
+    echo "   📁 manifests/base/ - ALL Kubernetes manifests"
+    echo "   📄 Dockerfile - Container definition"
+    echo "   📄 .github/workflows/ci-cd.yaml - GitHub Actions"
+    echo "   📄 README.md - Complete documentation"
+    echo
+    echo "🚀 Next steps:"
+    echo "1. Deploy: kubectl apply -k manifests/base"
+    echo "2. Check: kubectl get pods -n ${NAMESPACE}"
+    echo "3. Access: http://app.${PROJECT}.local"
+    echo "4. Monitor: http://grafana.${PROJECT}.local (admin/admin)"
+    echo "5. Manage DB: http://pgadmin.${PROJECT}.local (admin@example.com/adminpassword)"
+    echo "6. View Kafka: http://kafka-ui.${PROJECT}.local"
 }
 
 case "$1" in
-  generate)
-    generate_all
-    ;;
-  *)
-    echo "Usage: $0 generate"
-    exit 1
-    ;;
+    generate)
+        generate_all
+        ;;
+    *)
+        echo "Usage: $0 generate"
+        exit 1
+        ;;
 esac
