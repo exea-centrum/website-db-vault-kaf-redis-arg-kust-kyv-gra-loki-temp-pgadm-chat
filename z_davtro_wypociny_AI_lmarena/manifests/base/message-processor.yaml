@@ -1,0 +1,79 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: message-processor
+  namespace: davtrowebdbvault
+  labels:
+    app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
+    component: worker
+    app.kubernetes.io/name: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
+    app.kubernetes.io/instance: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
+    app.kubernetes.io/component: worker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
+      component: worker
+  template:
+    metadata:
+      labels:
+        app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
+        component: worker
+        app.kubernetes.io/name: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
+        app.kubernetes.io/instance: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
+        app.kubernetes.io/component: worker
+    spec:
+      containers:
+        - name: worker
+          image: ghcr.io/exea-centrum/website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui:latest
+          command: ["python", "worker.py"]
+          env:
+            - name: REDIS_HOST
+              value: "redis.davtrowebdbvault.svc.cluster.local"
+            - name: REDIS_PORT
+              value: "6379"
+            - name: REDIS_LIST
+              value: "outgoing_messages"
+            - name: KAFKA_BOOTSTRAP_SERVERS
+              value: "kafka-0.kafka.davtrowebdbvault.svc.cluster.local:9092"
+            - name: KAFKA_TOPIC
+              value: "survey-topic"
+            - name: VAULT_ADDR
+              value: "http://vault.davtrowebdbvault.svc.cluster.local:8200"
+            - name: VAULT_TOKEN
+              value: "root"
+            - name: DATABASE_URL
+              value: "dbname=webdb user=webuser password=testpassword host=postgres-db.davtrowebdbvault.svc.cluster.local port=5432"
+          resources:
+            requests:
+              cpu: "200m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          livenessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - 'python -c "import redis; redis.Redis(host=\"redis.davtrowebdbvault.svc.cluster.local\", port=6379, socket_connect_timeout=5).ping()"'
+            initialDelaySeconds: 60
+            periodSeconds: 30
+          readinessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - 'python -c "import redis; redis.Redis(host=\"redis.davtrowebdbvault.svc.cluster.local\", port=6379, socket_connect_timeout=5).ping()"'
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          startupProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - 'python -c "import redis; redis.Redis(host=\"redis.davtrowebdbvault.svc.cluster.local\", port=6379, socket_connect_timeout=5).ping()"'
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            failureThreshold: 30

@@ -28,11 +28,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Redis and Kafka configuration
 REDIS_HOST = os.getenv("REDIS_HOST", "redis")
 REDIS_PORT = int(os.getenv("REDIS_PORT", "6379"))
 REDIS_LIST = os.getenv("REDIS_LIST", "outgoing_messages")
-KAFKA_BOOTSTRAP = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka:9092")
+KAFKA_BOOTSTRAP = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka-0.kafka.davtrowebdbvault.svc.cluster.local:9092")
 KAFKA_TOPIC = os.getenv("KAFKA_TOPIC", "survey-topic")
 
 def get_redis():
@@ -47,7 +46,6 @@ def get_kafka():
                 value_serializer=lambda v: json.dumps(v).encode('utf-8'),
                 retries=3
             )
-            # Test connection
             producer.list_topics()
             logger.info("Kafka connected successfully")
             return producer
@@ -240,7 +238,6 @@ async def get_survey_questions():
 @app.post("/api/survey/submit")
 async def submit_survey(response: SurveyResponse):
     try:
-        # Push to Redis for processing
         r = get_redis()
         payload = {
             "type": "survey",
@@ -294,7 +291,6 @@ async def get_survey_stats():
 @app.post("/api/contact")
 async def submit_contact(email: str = Form(...), message: str = Form(...)):
     try:
-        # Push to Redis for processing
         r = get_redis()
         payload = {
             "type": "contact",

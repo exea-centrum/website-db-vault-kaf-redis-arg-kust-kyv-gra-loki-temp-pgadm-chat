@@ -3,22 +3,15 @@ kind: Kustomization
 namespace: davtrowebdbvault
 
 resources:
-  # 1. Core databases and storage
   - postgres-db.yaml
   - redis.yaml
   - vault.yaml
-
-  # 2. Message queue and streaming
-  - kafka-config.yaml
   - kafka-kraft.yaml
+  - kafka-job-sa.yaml
   - kafka-topic-job.yaml
-
-  # 3. Application components
   - fastapi-config.yaml
   - app-deployment.yaml
   - message-processor.yaml
-
-  # 4. Monitoring and observability
   - prometheus-config.yaml
   - postgres-exporter.yaml
   - kafka-exporter.yaml
@@ -34,12 +27,8 @@ resources:
   - promtail.yaml
   - tempo-config.yaml
   - tempo.yaml
-
-  # 5. Management UI and tools
   - pgadmin.yaml
   - kafka-ui.yaml
-
-  # 6. Security and networking
   - vault-secrets.yaml
   - vault-job.yaml
   - network-policies.yaml

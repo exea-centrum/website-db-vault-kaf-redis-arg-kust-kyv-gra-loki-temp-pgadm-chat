@@ -7,7 +7,6 @@ PROJECT="website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui"
 NAMESPACE="davtrowebdbvault"
 REGISTRY="${REGISTRY:-ghcr.io/exea-centrum/website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui}"
 REPO_URL="${REPO_URL:-https://github.com/exea-centrum/website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui.git}"
-KAFKA_CLUSTER_ID="${KAFKA_CLUSTER_ID:-00b0bc82-e1aa-4de0-8530-7dd209a3af28}"
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 APP_DIR="${ROOT_DIR}/app"
@@ -16,22 +15,22 @@ MANIFESTS_DIR="${ROOT_DIR}/manifests"
 BASE_DIR="${MANIFESTS_DIR}/base"
 WORKFLOW_DIR="${ROOT_DIR}/.github/workflows"
 
-info(){ printf "🔧 [unified] %s\n" "$*"; }
-mkdir_p(){ mkdir -p "$@"; }
+info() { printf "🔧 [unified] %s\n" "$*"; }
+mkdir_p() { mkdir -p "$@"; }
 
-generate_structure(){
- info "Creating directories..."
- mkdir_p "$APP_DIR" "$TEMPLATES_DIR" "$BASE_DIR" "$WORKFLOW_DIR" "${APP_DIR}/static"
+generate_structure() {
+    info "Creating directories..."
+    mkdir_p "$APP_DIR" "$TEMPLATES_DIR" "$BASE_DIR" "$WORKFLOW_DIR" "${APP_DIR}/static"
 }
 
-generate_fastapi_app(){
- info "Generating FastAPI app with survey system..."
+generate_fastapi_app() {
+    info "Generating FastAPI app with survey system..."
 
- cat > "${APP_DIR}/__init__.py" <<'PY'
+    cat >"${APP_DIR}/__init__.py" <<'PY'
 # FastAPI Application Package
 PY
 
- cat > "${APP_DIR}/main.py" <<'PY'
+    cat >"${APP_DIR}/main.py" <<'PY'
 from fastapi import FastAPI, Form, Request, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
@@ -62,11 +61,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Redis and Kafka configuration
 REDIS_HOST = os.getenv("REDIS_HOST", "redis")
 REDIS_PORT = int(os.getenv("REDIS_PORT", "6379"))
 REDIS_LIST = os.getenv("REDIS_LIST", "outgoing_messages")
-KAFKA_BOOTSTRAP = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka:9092")
+KAFKA_BOOTSTRAP = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka-0.kafka.davtrowebdbvault.svc.cluster.local:9092")
 KAFKA_TOPIC = os.getenv("KAFKA_TOPIC", "survey-topic")
 
 def get_redis():
@@ -81,7 +79,6 @@ def get_kafka():
                 value_serializer=lambda v: json.dumps(v).encode('utf-8'),
                 retries=3
             )
-            # Test connection
             producer.list_topics()
             logger.info("Kafka connected successfully")
             return producer
@@ -274,7 +271,6 @@ async def get_survey_questions():
 @app.post("/api/survey/submit")
 async def submit_survey(response: SurveyResponse):
     try:
-        # Push to Redis for processing
         r = get_redis()
         payload = {
             "type": "survey",
@@ -328,7 +324,6 @@ async def get_survey_stats():
 @app.post("/api/contact")
 async def submit_contact(email: str = Form(...), message: str = Form(...)):
     try:
-        # Push to Redis for processing
         r = get_redis()
         payload = {
             "type": "contact",
@@ -349,7 +344,7 @@ if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
 PY
 
- cat > "${APP_DIR}/worker.py" <<'PY'
+    cat >"${APP_DIR}/worker.py" <<'PY'
 #!/usr/bin/env python3
 import os, json, time, logging
 import redis
@@ -364,7 +359,7 @@ REDIS_HOST = os.getenv("REDIS_HOST", "redis")
 REDIS_PORT = int(os.getenv("REDIS_PORT", "6379"))
 REDIS_LIST = os.getenv("REDIS_LIST", "outgoing_messages")
 
-KAFKA_BOOTSTRAP = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka:9092")
+KAFKA_BOOTSTRAP = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka-0.kafka.davtrowebdbvault.svc.cluster.local:9092")
 KAFKA_TOPIC = os.getenv("KAFKA_TOPIC", "survey-topic")
 
 def get_vault_secret(secret_path: str) -> dict:
@@ -412,7 +407,6 @@ def get_kafka():
                 value_serializer=lambda v: json.dumps(v).encode('utf-8'),
                 retries=3
             )
-            # Test connection
             producer.list_topics()
             logger.info("Kafka connected successfully")
             return producer
@@ -465,15 +459,12 @@ def save_to_db(item_type, data):
 
 def process_item(item, producer):
     try:
-        # Save to PostgreSQL first (more critical)
         item_type = item.get("type")
         save_to_db(item_type, item)
         
-        # Then send to Kafka if available
         if producer:
             try:
                 future = producer.send(KAFKA_TOPIC, value=item)
-                # Wait for send to complete with timeout
                 future.get(timeout=10)
                 logger.info(f"Sent to Kafka topic {KAFKA_TOPIC}: {item}")
             except Exception as e:
@@ -485,13 +476,12 @@ def process_item(item, producer):
 def main():
     r = get_redis()
     producer = None
-    kafka_retry_time = 60  # Retry Kafka connection every 60 seconds
+    kafka_retry_time = 60
     
     logger.info("Worker started. Listening on Redis list '%s'", REDIS_LIST)
     
     while True:
         try:
-            # Try to connect to Kafka if not connected
             if not producer:
                 producer = get_kafka()
                 if not producer:
@@ -523,7 +513,7 @@ if __name__ == "__main__":
     main()
 PY
 
- cat > "${TEMPLATES_DIR}/index.html" <<'HTML'
+    cat >"${TEMPLATES_DIR}/index.html" <<'HTML'
 <!DOCTYPE html>
 <html lang="pl">
 <head>
@@ -695,7 +685,6 @@ PY
             });
         }
 
-        // Survey functionality
         async function loadSurveyQuestions() {
             try {
                 const response = await fetch('/api/survey/questions');
@@ -829,7 +818,7 @@ PY
 </html>
 HTML
 
- cat > "${APP_DIR}/requirements.txt" <<'REQ'
+    cat >"${APP_DIR}/requirements.txt" <<'REQ'
 fastapi==0.104.1
 uvicorn==0.24.0
 jinja2==3.1.2
@@ -843,13 +832,13 @@ hvac==1.1.0
 redis==4.6.0
 REQ
 
- chmod +x "${APP_DIR}/worker.py"
- info "FastAPI app with survey system generated."
+    chmod +x "${APP_DIR}/worker.py"
+    info "FastAPI app with survey system generated."
 }
 
-generate_dockerfile(){
- info "Generating Dockerfile..."
- cat > "${ROOT_DIR}/Dockerfile" <<'DOCK'
+generate_dockerfile() {
+    info "Generating Dockerfile..."
+    cat >"${ROOT_DIR}/Dockerfile" <<'DOCK'
 FROM python:3.11-slim-bullseye
 WORKDIR /app
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
@@ -861,10 +850,10 @@ CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
 DOCK
 }
 
-generate_github_actions(){
- info "Writing GitHub Actions workflow..."
- mkdir_p "$WORKFLOW_DIR"
- cat > "${WORKFLOW_DIR}/ci-cd.yaml" <<'YAML'
+generate_github_actions() {
+    info "Writing GitHub Actions workflow..."
+    mkdir_p "$WORKFLOW_DIR"
+    cat >"${WORKFLOW_DIR}/ci-cd.yaml" <<'YAML'
 name: CI/CD Build & Deploy
 
 on:
@@ -894,7 +883,7 @@ jobs:
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
-          password: ${{ secrets.GHCR_PAT }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push image
         uses: docker/build-push-action@v6
@@ -909,11 +898,10 @@ jobs:
 YAML
 }
 
-generate_k8s_manifests(){
- info "Generating ALL Kubernetes manifests..."
+generate_k8s_manifests() {
+    info "Generating ALL Kubernetes manifests..."
 
- # fastapi-config.yaml
- cat > "${BASE_DIR}/fastapi-config.yaml" <<YAML
+    cat >"${BASE_DIR}/fastapi-config.yaml" <<YAML
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -931,8 +919,7 @@ data:
   PYTHONUNBUFFERED: "1"
 YAML
 
- # app-deployment - OPTIMIZED with better health checks
- cat > "${BASE_DIR}/app-deployment.yaml" <<YAML
+    cat >"${BASE_DIR}/app-deployment.yaml" <<YAML
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -988,15 +975,7 @@ spec:
             [
               "/bin/bash",
               "-c",
-              'for i in {1..120}; do if /opt/confluent/bin/kafka-broker-api-versions --bootstrap-server kafka-0.kafka.${NAMESPACE}.svc.cluster.local:9092 &>/dev/null; then echo "✓ kafka broker ready"; break; fi; echo "Attempt $i/120: Kafka not ready..."; sleep 5; done',
-            ]
-        - name: wait-for-kafka-topics
-          image: confluentinc/cp-kafka:7.5.0
-          command:
-            [
-              "/bin/bash",
-              "-c",
-              'for i in {1..120}; do if /opt/confluent/bin/kafka-topics --list --bootstrap-server kafka-0.kafka.${NAMESPACE}.svc.cluster.local:9092 2>/dev/null | grep -q "^survey-topic$"; then echo "✓ survey-topic exists"; break; fi; echo "Attempt $i/120: survey-topic not ready..."; sleep 5; done',
+              'for i in {1..120}; do if /opt/confluent/bin/kafka-broker-api-versions --bootstrap-server kafka-0.kafka.${NAMESPACE}.svc.cluster.local:9092 &>/dev/null; then echo "✓ kafka broker ready"; break; fi; echo "Attempt \$i/120: Kafka not ready..."; sleep 5; done',
             ]
       containers:
       - name: app
@@ -1036,7 +1015,6 @@ spec:
           initialDelaySeconds: 60
           periodSeconds: 30
           failureThreshold: 3
-          timeoutSeconds: 10
         readinessProbe:
           httpGet:
             path: /health
@@ -1044,15 +1022,6 @@ spec:
           initialDelaySeconds: 30
           periodSeconds: 20
           failureThreshold: 3
-          timeoutSeconds: 10
-        startupProbe:
-          httpGet:
-            path: /health
-            port: 8000
-          initialDelaySeconds: 30
-          periodSeconds: 20
-          failureThreshold: 10
-          timeoutSeconds: 10
 ---
 apiVersion: v1
 kind: Service
@@ -1086,8 +1055,7 @@ metadata:
     app.kubernetes.io/instance: ${PROJECT}
 YAML
 
- # message-processor - OPTIMIZED
- cat > "${BASE_DIR}/message-processor.yaml" <<YAML
+    cat >"${BASE_DIR}/message-processor.yaml" <<YAML
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -1142,15 +1110,7 @@ spec:
             [
               "/bin/bash",
               "-c",
-              'for i in {1..120}; do if /opt/confluent/bin/kafka-broker-api-versions --bootstrap-server kafka-0.kafka.${NAMESPACE}.svc.cluster.local:9092 &>/dev/null; then echo "✓ kafka broker ready"; break; fi; echo "Attempt $i/120: Kafka not ready..."; sleep 5; done',
-            ]
-        - name: wait-for-kafka-topics
-          image: confluentinc/cp-kafka:7.5.0
-          command:
-            [
-              "/bin/bash",
-              "-c",
-              'for i in {1..120}; do if /opt/confluent/bin/kafka-topics --list --bootstrap-server kafka-0.kafka.${NAMESPACE}.svc.cluster.local:9092 2>/dev/null | grep -q "^survey-topic$"; then echo "✓ survey-topic ready"; break; fi; echo "Attempt $i/120: survey-topic not ready..."; sleep 5; done',
+              'for i in {1..120}; do if /opt/confluent/bin/kafka-broker-api-versions --bootstrap-server kafka-0.kafka.${NAMESPACE}.svc.cluster.local:9092 &>/dev/null; then echo "✓ kafka broker ready"; break; fi; echo "Attempt \$i/120: Kafka not ready..."; sleep 5; done',
             ]
       containers:
       - name: worker
@@ -1198,8 +1158,7 @@ spec:
           periodSeconds: 10
 YAML
 
- # postgres-db - NAPRAWIONE (Permission Denied + Security Context)
- cat > "${BASE_DIR}/postgres-db.yaml" <<YAML
+    cat >"${BASE_DIR}/postgres-db.yaml" <<YAML
 apiVersion: v1
 kind: Service
 metadata:
@@ -1282,22 +1241,11 @@ spec:
             command: ["pg_isready", "-U", "webuser", "-d", "webdb"]
           initialDelaySeconds: 60
           periodSeconds: 10
-          timeoutSeconds: 5
-          failureThreshold: 6
         readinessProbe:
           exec:
             command: ["pg_isready", "-U", "webuser", "-d", "webdb"]
           initialDelaySeconds: 30
           periodSeconds: 5
-          timeoutSeconds: 3
-          failureThreshold: 5
-        startupProbe:
-          exec:
-            command: ["pg_isready", "-U", "webuser", "-d", "webdb"]
-          initialDelaySeconds: 10
-          periodSeconds: 10
-          timeoutSeconds: 5
-          failureThreshold: 30
   volumeClaimTemplates:
   - metadata:
       name: postgres-data
@@ -1308,8 +1256,7 @@ spec:
           storage: 10Gi
 YAML
 
- # pgadmin - OPTIMIZED
- cat > "${BASE_DIR}/pgadmin.yaml" <<YAML
+    cat >"${BASE_DIR}/pgadmin.yaml" <<YAML
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -1387,8 +1334,6 @@ spec:
               value: "False"
             - name: PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED
               value: "False"
-            - name: PGADMIN_CONFIG_UPGRADE_CHECK_ENABLED
-              value: "False"
           ports:
             - containerPort: 80
               name: http
@@ -1405,16 +1350,12 @@ spec:
               port: 80
             initialDelaySeconds: 120
             periodSeconds: 30
-            timeoutSeconds: 10
-            failureThreshold: 3
           readinessProbe:
             httpGet:
               path: /misc/ping
               port: 80
             initialDelaySeconds: 60
             periodSeconds: 10
-            timeoutSeconds: 5
-            failureThreshold: 3
           volumeMounts:
             - name: pgadmin-data
               mountPath: /var/lib/pgadmin
@@ -1467,8 +1408,7 @@ spec:
       storage: 2Gi
 YAML
 
- # vault - NAPRAWIONE (literały zamiast zmiennych)
- cat > "${BASE_DIR}/vault.yaml" <<'YAML'
+    cat >"${BASE_DIR}/vault.yaml" <<YAML
 apiVersion: v1
 kind: Service
 metadata:
@@ -1543,14 +1483,12 @@ spec:
           httpGet:
             path: /v1/sys/health
             port: 8200
-            scheme: HTTP
           initialDelaySeconds: 5
           periodSeconds: 5
         livenessProbe:
           httpGet:
             path: /v1/sys/health
             port: 8200
-            scheme: HTTP
           initialDelaySeconds: 15
           periodSeconds: 15
 ---
@@ -1565,8 +1503,7 @@ metadata:
     app.kubernetes.io/instance: ${PROJECT}
 YAML
 
- # vault-secrets.yaml
- cat > "${BASE_DIR}/vault-secrets.yaml" <<YAML
+    cat >"${BASE_DIR}/vault-secrets.yaml" <<YAML
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -1583,30 +1520,24 @@ data:
     export VAULT_ADDR="http://vault:8200"
     export VAULT_TOKEN="root"
     
-    # Enable KV secrets engine
     vault secrets enable -path=secret kv-v2
     
-    # Create database secrets
     vault kv put secret/database/postgres \
       postgres-user="webuser" \
       postgres-password="testpassword" \
       postgres-db="webdb" \
       postgres-host="postgres-db"
     
-    # Create Redis secrets
     vault kv put secret/redis \
       redis-password=""
     
-    # Create Kafka secrets  
     vault kv put secret/kafka \
       kafka-brokers="kafka:9092"
     
-    # Create Grafana secrets
     vault kv put secret/grafana \
       admin-user="admin" \
       admin-password="admin"
     
-    # Create PgAdmin secrets
     vault kv put secret/pgadmin \
       pgadmin-email="admin@example.com" \
       pgadmin-password="adminpassword"
@@ -1614,8 +1545,7 @@ data:
     echo "Vault initialization completed"
 YAML
 
- # vault-job.yaml
- cat > "${BASE_DIR}/vault-job.yaml" <<YAML
+    cat >"${BASE_DIR}/vault-job.yaml" <<YAML
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -1659,8 +1589,7 @@ spec:
   backoffLimit: 3
 YAML
 
- # redis - OPTIMIZED
- cat > "${BASE_DIR}/redis.yaml" <<YAML
+    cat >"${BASE_DIR}/redis.yaml" <<YAML
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -1687,26 +1616,6 @@ spec:
         app.kubernetes.io/instance: ${PROJECT}
         app.kubernetes.io/component: redis
     spec:
-      securityContext:
-        runAsUser: 1000
-        fsGroup: 1000
-      initContainers:
-        - name: fix-permissions
-          image: busybox:1.36
-          securityContext:
-            runAsUser: 0
-          command:
-            - sh
-            - -c
-            - |
-              echo "Cleaning and preparing /var/lib/kafka/data..."
-              rm -rf /var/lib/kafka/data/* /var/lib/kafka/data/.*
-              chown -R 1000:1000 /var/lib/kafka/data
-              chmod -R 2775 /var/lib/kafka/data
-              ls -la /var/lib/kafka || true
-          volumeMounts:
-            - name: kafka-data
-              mountPath: /var/lib/kafka/data/
       containers:
       - name: redis
         image: redis:7-alpine
@@ -1752,8 +1661,7 @@ spec:
     component: redis
 YAML
 
- # kafka-kraft - NAPRAWIONE (obraz + volumy + env)
- cat > "${BASE_DIR}/kafka-kraft.yaml" <<YAML
+    cat >"${BASE_DIR}/kafka-kraft.yaml" <<YAML
 apiVersion: v1
 kind: Service
 metadata:
@@ -1805,7 +1713,7 @@ spec:
     spec:
       containers:
       - name: kafka
-        image: docker.io/confluentinc/cp-kafka:latest
+        image: confluentinc/cp-kafka:7.5.0
         env:
         - name: KAFKA_BROKER_ID
           value: "0"
@@ -1851,22 +1759,11 @@ spec:
             port: 9092
           initialDelaySeconds: 60
           periodSeconds: 10
-          timeoutSeconds: 5
-          failureThreshold: 6
         livenessProbe:
           tcpSocket:
             port: 9092
           initialDelaySeconds: 90
           periodSeconds: 10
-          timeoutSeconds: 5
-          failureThreshold: 6
-        startupProbe:
-          tcpSocket:
-            port: 9092
-          initialDelaySeconds: 30
-          periodSeconds: 10
-          timeoutSeconds: 5
-          failureThreshold: 30
   volumeClaimTemplates:
   - metadata:
       name: kafka-data
@@ -1877,8 +1774,7 @@ spec:
           storage: 10Gi
 YAML
 
- # kafka-topic-job - NAPRAWIONE Z WAITEM NA KAFKA
- cat > "${BASE_DIR}/kafka-topic-job.yaml" <<YAML
+    cat >"${BASE_DIR}/kafka-topic-job.yaml" <<YAML
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -1916,7 +1812,7 @@ spec:
                   echo "✓ Kafka broker is ready!"
                   exit 0
                 fi
-                echo "Attempt $i/120: Kafka not ready..."
+                echo "Attempt \$i/120: Kafka not ready..."
                 sleep 5
               done
               echo "✗ Kafka broker failed to start"
@@ -1931,7 +1827,6 @@ spec:
               set -e
               echo "Creating Kafka topics..."
               
-              # Create survey topic with better settings
               /opt/confluent/bin/kafka-topics --create \
                 --bootstrap-server kafka-0.kafka.${NAMESPACE}.svc.cluster.local:9092 \
                 --topic survey-topic \
@@ -1941,7 +1836,6 @@ spec:
                 --config min.insync.replicas=1 \
                 --if-not-exists
               
-              # Verify topic was created
               echo "Verifying topics..."
               /opt/confluent/bin/kafka-topics --list \
                 --bootstrap-server kafka-0.kafka.${NAMESPACE}.svc.cluster.local:9092
@@ -1950,8 +1844,7 @@ spec:
       restartPolicy: OnFailure
 YAML
 
- # kafka-job-sa - ServiceAccount dla kafka-topic-job
- cat > "${BASE_DIR}/kafka-job-sa.yaml" <<YAML
+    cat >"${BASE_DIR}/kafka-job-sa.yaml" <<YAML
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -1964,8 +1857,7 @@ metadata:
     app.kubernetes.io/instance: ${PROJECT}
 YAML
 
- # kafka-ui - OPTIMIZED
- cat > "${BASE_DIR}/kafka-ui.yaml" <<YAML
+    cat >"${BASE_DIR}/kafka-ui.yaml" <<YAML
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -2001,11 +1893,11 @@ spec:
             - |
               echo "Waiting for Kafka broker to be ready..."
               for i in {1..120}; do
-                if /opt/confluent/bin/kafka-broker-api-versions --bootstrap-server kafka-0.kafka.${NAMESPACE}.svc.cluster.local:9092 &>/dev/null; then
+                if /opt/confluent/bin/kafka-topics --list --bootstrap-server kafka-0.kafka.${NAMESPACE}.svc.cluster.local:9092 2>/dev/null; then
                   echo "✓ Kafka broker is ready!"
                   exit 0
                 fi
-                echo "Attempt $i/120: Kafka not ready..."
+                echo "Attempt \$i/120: Kafka not ready..."
                 sleep 5
               done
               echo "✗ Kafka broker failed to start"
@@ -2065,8 +1957,7 @@ spec:
     component: kafka-ui
 YAML
 
- # prometheus-config
- cat > "${BASE_DIR}/prometheus-config.yaml" <<YAML
+    cat >"${BASE_DIR}/prometheus-config.yaml" <<YAML
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -2120,15 +2011,9 @@ data:
         static_configs:
           - targets: ['node-exporter:9100']
         scrape_interval: 30s
-        
-      - job_name: 'prometheus'
-        static_configs:
-          - targets: ['localhost:9090']
-        scrape_interval: 30s
 YAML
 
- # postgres-exporter - NAPRAWIONE (uproszczona konfiguracja)
- cat > "${BASE_DIR}/postgres-exporter.yaml" <<YAML
+    cat >"${BASE_DIR}/postgres-exporter.yaml" <<YAML
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -2221,8 +2106,7 @@ spec:
     component: postgres-exporter
 YAML
 
- # kafka-exporter - NAPRAWIONE (obraz)
- cat > "${BASE_DIR}/kafka-exporter.yaml" <<YAML
+    cat >"${BASE_DIR}/kafka-exporter.yaml" <<YAML
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -2258,11 +2142,11 @@ spec:
             - |
               echo "Waiting for Kafka broker to be ready..."
               for i in {1..120}; do
-                if /opt/confluent/bin/kafka-broker-api-versions --bootstrap-server kafka-0.kafka.${NAMESPACE}.svc.cluster.local:9092 &>/dev/null; then
+                if /opt/confluent/bin/kafka-topics --list --bootstrap-server kafka-0.kafka.${NAMESPACE}.svc.cluster.local:9092 2>/dev/null; then
                   echo "✓ Kafka broker is ready!"
                   exit 0
                 fi
-                echo "Attempt $i/120: Kafka not ready..."
+                echo "Attempt \$i/120: Kafka not ready..."
                 sleep 5
               done
               echo "✗ Kafka broker failed to start"
@@ -2319,8 +2203,7 @@ spec:
     component: kafka-exporter
 YAML
 
- # node-exporter
- cat > "${BASE_DIR}/node-exporter.yaml" <<YAML
+    cat >"${BASE_DIR}/node-exporter.yaml" <<YAML
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:
@@ -2411,8 +2294,7 @@ spec:
   clusterIP: None
 YAML
 
- # service-monitors
- cat > "${BASE_DIR}/service-monitors.yaml" <<YAML
+    cat >"${BASE_DIR}/service-monitors.yaml" <<YAML
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
@@ -2509,8 +2391,7 @@ spec:
     interval: 30s
 YAML
 
- # prometheus
- cat > "${BASE_DIR}/prometheus.yaml" <<YAML
+    cat >"${BASE_DIR}/prometheus.yaml" <<YAML
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -2606,8 +2487,7 @@ spec:
       storage: 20Gi
 YAML
 
- # grafana-datasource
- cat > "${BASE_DIR}/grafana-datasource.yaml" <<YAML
+    cat >"${BASE_DIR}/grafana-datasource.yaml" <<YAML
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -2648,8 +2528,7 @@ data:
         sslmode: "disable"
 YAML
 
- # grafana-dashboards
- cat > "${BASE_DIR}/grafana-dashboards.yaml" <<YAML
+    cat >"${BASE_DIR}/grafana-dashboards.yaml" <<YAML
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -2789,8 +2668,7 @@ data:
     }
 YAML
 
- # grafana
- cat > "${BASE_DIR}/grafana.yaml" <<YAML
+    cat >"${BASE_DIR}/grafana.yaml" <<YAML
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -2930,8 +2808,7 @@ data:
         path: /var/lib/grafana/dashboards
 YAML
 
- # loki-config
- cat > "${BASE_DIR}/loki-config.yaml" <<YAML
+    cat >"${BASE_DIR}/loki-config.yaml" <<YAML
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -2978,8 +2855,7 @@ data:
       reporting_enabled: false
 YAML
 
- # loki
- cat > "${BASE_DIR}/loki.yaml" <<YAML
+    cat >"${BASE_DIR}/loki.yaml" <<YAML
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -3075,8 +2951,7 @@ spec:
       storage: 10Gi
 YAML
 
- # promtail-config
- cat > "${BASE_DIR}/promtail-config.yaml" <<YAML
+    cat >"${BASE_DIR}/promtail-config.yaml" <<YAML
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -3130,10 +3005,6 @@ data:
         - __meta_kubernetes_pod_uid
         - __meta_kubernetes_pod_container_name
         target_label: __path__
-      - source_labels: [__meta_kubernetes_pod_uid]
-        action: replace
-        regex: true
-        target_label: __path__
     
     - job_name: kubernetes-system
       static_configs:
@@ -3144,8 +3015,7 @@ data:
           __path__: /var/log/containers/*.log
 YAML
 
- # promtail
- cat > "${BASE_DIR}/promtail.yaml" <<YAML
+    cat >"${BASE_DIR}/promtail.yaml" <<YAML
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:
@@ -3232,9 +3102,6 @@ rules:
 - apiGroups: [""]
   resources: ["nodes", "nodes/proxy", "services", "endpoints", "pods"]
   verbs: ["get", "list", "watch"]
-- apiGroups: ["extensions"]
-  resources: ["deployments"]
-  verbs: ["get", "list", "watch"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
@@ -3254,8 +3121,7 @@ subjects:
   namespace: ${NAMESPACE}
 YAML
 
- # tempo-config
- cat > "${BASE_DIR}/tempo-config.yaml" <<YAML
+    cat >"${BASE_DIR}/tempo-config.yaml" <<YAML
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -3290,8 +3156,7 @@ data:
       max_block_duration: 5m
 YAML
 
- # tempo
- cat > "${BASE_DIR}/tempo.yaml" <<YAML
+    cat >"${BASE_DIR}/tempo.yaml" <<YAML
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -3377,8 +3242,7 @@ spec:
     component: tempo
 YAML
 
- # network-policies
- cat > "${BASE_DIR}/network-policies.yaml" <<YAML
+    cat >"${BASE_DIR}/network-policies.yaml" <<YAML
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -3485,14 +3349,6 @@ spec:
     ports:
     - protocol: TCP
       port: 3200
-  - to:
-    - podSelector:
-        matchLabels:
-          app: ${PROJECT}
-          component: postgres
-    ports:
-    - protocol: TCP
-      port: 5432
 
 ---
 apiVersion: networking.k8s.io/v1
@@ -3516,29 +3372,6 @@ spec:
     ports:
     - protocol: TCP
       port: 9187
-
----
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: allow-postgres-exporter-to-postgres
-  namespace: ${NAMESPACE}
-spec:
-  podSelector:
-    matchLabels:
-      app: ${PROJECT}
-      component: postgres-exporter
-  policyTypes:
-  - Egress
-  egress:
-  - to:
-    - podSelector:
-        matchLabels:
-          app: ${PROJECT}
-          component: postgres
-    ports:
-    - protocol: TCP
-      port: 5432
 
 ---
 apiVersion: networking.k8s.io/v1
@@ -3587,8 +3420,7 @@ spec:
       port: 9092
 YAML
 
- # ingress
- cat > "${BASE_DIR}/ingress.yaml" <<YAML
+    cat >"${BASE_DIR}/ingress.yaml" <<YAML
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -3646,8 +3478,7 @@ spec:
               number: 8080
 YAML
 
- # kyverno-policy
- cat > "${BASE_DIR}/kyverno-policy.yaml" <<YAML
+    cat >"${BASE_DIR}/kyverno-policy.yaml" <<YAML
 apiVersion: kyverno.io/v1
 kind: ClusterPolicy
 metadata:
@@ -3679,29 +3510,21 @@ spec:
                 cpu: "?*"
 YAML
 
- # kustomization - OPTIMIZED order
- cat > "${BASE_DIR}/kustomization.yaml" <<YAML
+    cat >"${BASE_DIR}/kustomization.yaml" <<YAML
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 namespace: ${NAMESPACE}
 
 resources:
-  # 1. Core databases and storage
   - postgres-db.yaml
   - redis.yaml
   - vault.yaml
-
-  # 2. Message queue and streaming
   - kafka-kraft.yaml
   - kafka-job-sa.yaml
   - kafka-topic-job.yaml
-
-  # 3. Application components
   - fastapi-config.yaml
   - app-deployment.yaml
   - message-processor.yaml
-
-  # 4. Monitoring and observability
   - prometheus-config.yaml
   - postgres-exporter.yaml
   - kafka-exporter.yaml
@@ -3717,12 +3540,8 @@ resources:
   - promtail.yaml
   - tempo-config.yaml
   - tempo.yaml
-
-  # 5. Management UI and tools
   - pgadmin.yaml
   - kafka-ui.yaml
-
-  # 6. Security and networking
   - vault-secrets.yaml
   - vault-job.yaml
   - network-policies.yaml
@@ -3737,8 +3556,7 @@ labels:
       app.kubernetes.io/managed-by: kustomize
 YAML
 
- # argocd application
- cat > "${ROOT_DIR}/argocd-application.yaml" <<YAML
+    cat >"${ROOT_DIR}/argocd-application.yaml" <<YAML
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
@@ -3759,39 +3577,19 @@ spec:
       selfHeal: true
 YAML
 
- info "All Kubernetes manifests written to ${BASE_DIR}."
+    info "All Kubernetes manifests written to ${BASE_DIR}."
 }
 
-generate_readme(){
- info "Generating README.md..."
- cat > "${ROOT_DIR}/README.md" <<README
+generate_readme() {
+    info "Generating README.md..."
+    cat >"${ROOT_DIR}/README.md" <<README
 # ${PROJECT} - Complete Monitoring Stack
-
-## ✅ WSZYSTKIE BŁĘDY NAPRAWIONE!
-
-### 🔧 Naprawione problemy:
-1. **PostgreSQL** - dodano securityContext i subPath (Permission Denied naprawiony)
-2. **Kafka** - zmieniono obraz na \`bitnami/kafka:3.6.1\` + dodano volumy
-3. **Kafka Exporter** - zmieniono obraz na \`danielqsj/kafka-exporter:v1.7.0\`
-4. **Postgres Exporter** - uproszczono konfigurację
-5. **GitHub Actions** - poprawiono autentykację (używa \${{ secrets.GITHUB_TOKEN }})
-6. **Vault** - zmienne są poprawnie podstawiane
-7. **Wszystkie init containers** - czekają na pełną gotowość serwisów
-
-### 🏷️ Label Convention:
-\`\`\`
-app: ${PROJECT}
-component: <service-name>
-app.kubernetes.io/name: ${PROJECT}
-app.kubernetes.io/instance: ${PROJECT}
-app.kubernetes.io/component: <service-name>
-\`\`\`
 
 ## 🛠️ Quick Start
 
 \`\`\`bash
 # Generate all files
-./chatgpt.sh generate
+./lmarena.sh generate
 
 # Deploy to Kubernetes
 kubectl apply -k manifests/base
@@ -3843,63 +3641,41 @@ kubectl wait --for=condition=complete job/vault-init -n ${NAMESPACE}
 - Proper security contexts for PostgreSQL
 - Proper health checks and resource limits
 
-## 🎯 Naprawione błędy:
-
-1. ✅ **postgres-db** - CrashLoopBackOff → NAPRAWIONE (securityContext + subPath)
-2. ✅ **kafka** - ImagePullBackOff → NAPRAWIONE (obraz 3.6.1)
-3. ✅ **kafka-exporter** - ImagePullBackOff → NAPRAWIONE (danielqsj/kafka-exporter)
-4. ✅ **postgres-exporter** - CrashLoopBackOff → NAPRAWIONE (uproszczona config)
-5. ✅ **create-kafka-topics** - ImagePullBackOff → NAPRAWIONE (obraz 3.6.1)
-6. ✅ **fastapi-web-app** - Init:0/3 → NAPRAWIONE (poprawne wait-for)
-7. ✅ **message-processor** - Init:0/3 → NAPRAWIONE (poprawne wait-for)
-8. ✅ **pgadmin** - Init:0/1 → NAPRAWIONE (wait-for-postgres)
-9. ✅ **kafka-ui** - Init:0/1 → NAPRAWIONE (wait-for-kafka)
-
 README
 }
 
-generate_all(){
- info "Starting complete generation..."
- generate_structure
- generate_fastapi_app
- generate_dockerfile
- generate_github_actions
- generate_k8s_manifests
- generate_readme
- echo
- info "✅ WSZYSTKO NAPRAWIONE! Teraz zadziała!"
- echo "🎯 Wszystkie błędy naprawione:"
- echo "   🔧 PostgreSQL - Permission Denied (securityContext + subPath)"
- echo "   🐳 Kafka - ImagePullBackOff (obraz 3.6.1 + volumy)"
- echo "   🐳 Kafka Exporter - ImagePullBackOff (danielqsj/kafka-exporter:v1.7.0)"
- echo "   📊 Postgres Exporter - CrashLoopBackOff (uproszczona config)"
- echo "   🔐 GitHub Actions - Password Required (secrets.GITHUB_TOKEN)"
- echo "   🏷️ Vault - Invalid labels (poprawne podstawianie zmiennych)"
- echo ""
- echo "📁 Structure:"
- echo "   📁 app/ - FastAPI application with Vault integration"
- echo "   📁 manifests/base/ - ALL Kubernetes manifests (NAPRAWIONE!)"
- echo "   📄 Dockerfile - Container definition"
- echo "   📄 .github/workflows/ci-cd.yaml - GitHub Actions (NAPRAWIONE!)"
- echo "   📄 README.md - Complete documentation"
- echo
- echo "🚀 Next steps:"
- echo "1. Deploy: kubectl apply -k manifests/base"
- echo "2. Check: kubectl get pods -n ${NAMESPACE}"
- echo "3. Access: http://app.${PROJECT}.local"
- echo "4. Monitor: http://grafana.${PROJECT}.local (admin/admin)"
- echo "5. Manage DB: http://pgadmin.${PROJECT}.local (admin@example.com/adminpassword)"
- echo "6. View Kafka: http://kafka-ui.${PROJECT}.local"
- echo
- echo "💪 TAK! PORADZIŁEM SOBIE! Wszystkie 10 błędów naprawionych!"
+generate_all() {
+    info "Starting complete generation..."
+    generate_structure
+    generate_fastapi_app
+    generate_dockerfile
+    generate_github_actions
+    generate_k8s_manifests
+    generate_readme
+    echo
+    info "✅ Generation complete!"
+    echo "📁 Structure:"
+    echo "   📁 app/ - FastAPI application with Vault integration"
+    echo "   📁 manifests/base/ - ALL Kubernetes manifests"
+    echo "   📄 Dockerfile - Container definition"
+    echo "   📄 .github/workflows/ci-cd.yaml - GitHub Actions"
+    echo "   📄 README.md - Complete documentation"
+    echo
+    echo "🚀 Next steps:"
+    echo "1. Deploy: kubectl apply -k manifests/base"
+    echo "2. Check: kubectl get pods -n ${NAMESPACE}"
+    echo "3. Access: http://app.${PROJECT}.local"
+    echo "4. Monitor: http://grafana.${PROJECT}.local (admin/admin)"
+    echo "5. Manage DB: http://pgadmin.${PROJECT}.local (admin@example.com/adminpassword)"
+    echo "6. View Kafka: http://kafka-ui.${PROJECT}.local"
 }
 
 case "$1" in
-  generate)
-    generate_all
-    ;;
-  *)
-    echo "Usage: $0 generate"
-    exit 1
-    ;;
+    generate)
+        generate_all
+        ;;
+    *)
+        echo "Usage: $0 generate"
+        exit 1
+        ;;
 esac

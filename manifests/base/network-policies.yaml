@@ -104,14 +104,6 @@ spec:
     ports:
     - protocol: TCP
       port: 3200
-  - to:
-    - podSelector:
-        matchLabels:
-          app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
-          component: postgres
-    ports:
-    - protocol: TCP
-      port: 5432
 
 ---
 apiVersion: networking.k8s.io/v1
@@ -135,29 +127,6 @@ spec:
     ports:
     - protocol: TCP
       port: 9187
-
----
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: allow-postgres-exporter-to-postgres
-  namespace: davtrowebdbvault
-spec:
-  podSelector:
-    matchLabels:
-      app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
-      component: postgres-exporter
-  policyTypes:
-  - Egress
-  egress:
-  - to:
-    - podSelector:
-        matchLabels:
-          app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
-          component: postgres
-    ports:
-    - protocol: TCP
-      port: 5432
 
 ---
 apiVersion: networking.k8s.io/v1

@@ -12,7 +12,7 @@ REDIS_HOST = os.getenv("REDIS_HOST", "redis")
 REDIS_PORT = int(os.getenv("REDIS_PORT", "6379"))
 REDIS_LIST = os.getenv("REDIS_LIST", "outgoing_messages")
 
-KAFKA_BOOTSTRAP = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka:9092")
+KAFKA_BOOTSTRAP = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka-0.kafka.davtrowebdbvault.svc.cluster.local:9092")
 KAFKA_TOPIC = os.getenv("KAFKA_TOPIC", "survey-topic")
 
 def get_vault_secret(secret_path: str) -> dict:
@@ -60,7 +60,6 @@ def get_kafka():
                 value_serializer=lambda v: json.dumps(v).encode('utf-8'),
                 retries=3
             )
-            # Test connection
             producer.list_topics()
             logger.info("Kafka connected successfully")
             return producer
@@ -113,15 +112,12 @@ def save_to_db(item_type, data):
 
 def process_item(item, producer):
     try:
-        # Save to PostgreSQL first (more critical)
         item_type = item.get("type")
         save_to_db(item_type, item)
         
-        # Then send to Kafka if available
         if producer:
             try:
                 future = producer.send(KAFKA_TOPIC, value=item)
-                # Wait for send to complete with timeout
                 future.get(timeout=10)
                 logger.info(f"Sent to Kafka topic {KAFKA_TOPIC}: {item}")
             except Exception as e:
@@ -133,13 +129,12 @@ def process_item(item, producer):
 def main():
     r = get_redis()
     producer = None
-    kafka_retry_time = 60  # Retry Kafka connection every 60 seconds
+    kafka_retry_time = 60
     
     logger.info("Worker started. Listening on Redis list '%s'", REDIS_LIST)
     
     while True:
         try:
-            # Try to connect to Kafka if not connected
             if not producer:
                 producer = get_kafka()
                 if not producer:

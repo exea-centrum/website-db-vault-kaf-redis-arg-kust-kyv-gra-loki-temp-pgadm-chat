@@ -1,30 +1,10 @@
 # website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui - Complete Monitoring Stack
 
-## ✅ WSZYSTKIE BŁĘDY NAPRAWIONE!
-
-### 🔧 Naprawione problemy:
-1. **PostgreSQL** - dodano securityContext i subPath (Permission Denied naprawiony)
-2. **Kafka** - zmieniono obraz na `bitnami/kafka:3.6.1` + dodano volumy
-3. **Kafka Exporter** - zmieniono obraz na `danielqsj/kafka-exporter:v1.7.0`
-4. **Postgres Exporter** - uproszczono konfigurację
-5. **GitHub Actions** - poprawiono autentykację (używa ${{ secrets.GITHUB_TOKEN }})
-6. **Vault** - zmienne są poprawnie podstawiane
-7. **Wszystkie init containers** - czekają na pełną gotowość serwisów
-
-### 🏷️ Label Convention:
-```
-app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
-component: <service-name>
-app.kubernetes.io/name: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
-app.kubernetes.io/instance: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
-app.kubernetes.io/component: <service-name>
-```
-
 ## 🛠️ Quick Start
 
 ```bash
 # Generate all files
-./chatgpt.sh generate
+./lmarena.sh generate
 
 # Deploy to Kubernetes
 kubectl apply -k manifests/base
@@ -75,16 +55,4 @@ kubectl wait --for=condition=complete job/vault-init -n davtrowebdbvault
 - Network policies for service communication
 - Proper security contexts for PostgreSQL
 - Proper health checks and resource limits
-
-## 🎯 Naprawione błędy:
-
-1. ✅ **postgres-db** - CrashLoopBackOff → NAPRAWIONE (securityContext + subPath)
-2. ✅ **kafka** - ImagePullBackOff → NAPRAWIONE (obraz 3.6.1)
-3. ✅ **kafka-exporter** - ImagePullBackOff → NAPRAWIONE (danielqsj/kafka-exporter)
-4. ✅ **postgres-exporter** - CrashLoopBackOff → NAPRAWIONE (uproszczona config)
-5. ✅ **create-kafka-topics** - ImagePullBackOff → NAPRAWIONE (obraz 3.6.1)
-6. ✅ **fastapi-web-app** - Init:0/3 → NAPRAWIONE (poprawne wait-for)
-7. ✅ **message-processor** - Init:0/3 → NAPRAWIONE (poprawne wait-for)
-8. ✅ **pgadmin** - Init:0/1 → NAPRAWIONE (wait-for-postgres)
-9. ✅ **kafka-ui** - Init:0/1 → NAPRAWIONE (wait-for-kafka)
 

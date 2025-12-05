@@ -50,6 +50,19 @@ spec:
         app.kubernetes.io/instance: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
         app.kubernetes.io/component: pgadmin
     spec:
+      initContainers:
+        - name: wait-for-postgres
+          image: busybox:1.35
+          command:
+            - "sh"
+            - "-c"
+            - |
+              echo "Waiting for PostgreSQL to be ready..."
+              until nc -z postgres-db 5432; do
+                echo "Waiting for PostgreSQL..."
+                sleep 10
+              done
+              echo "PostgreSQL is ready!"
       containers:
         - name: pgadmin
           image: dpage/pgadmin4:7.2
@@ -61,8 +74,6 @@ spec:
             - name: PGADMIN_CONFIG_SERVER_MODE
               value: "False"
             - name: PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED
-              value: "False"
-            - name: PGADMIN_CONFIG_UPGRADE_CHECK_ENABLED
               value: "False"
           ports:
             - containerPort: 80
@@ -80,16 +91,12 @@ spec:
               port: 80
             initialDelaySeconds: 120
             periodSeconds: 30
-            timeoutSeconds: 10
-            failureThreshold: 3
           readinessProbe:
             httpGet:
               path: /misc/ping
               port: 80
             initialDelaySeconds: 60
             periodSeconds: 10
-            timeoutSeconds: 5
-            failureThreshold: 3
           volumeMounts:
             - name: pgadmin-data
               mountPath: /var/lib/pgadmin
