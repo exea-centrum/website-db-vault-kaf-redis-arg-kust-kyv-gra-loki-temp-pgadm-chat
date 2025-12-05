@@ -19,7 +19,6 @@ spec:
   selector:
     app: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
     component: kafka
-
 ---
 apiVersion: apps/v1
 kind: StatefulSet
@@ -48,6 +47,19 @@ spec:
         app.kubernetes.io/instance: website-db-vault-kaf-redis-arg-kust-kyv-gra-loki-temp-pgui
         app.kubernetes.io/component: kafka
     spec:
+      initContainers:
+        - name: cleanup-kafka-data
+          image: busybox:1.36
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              echo "Cleaning up Kafka data directory..."
+              rm -rf /var/lib/kafka/data/*
+              rm -rf /var/lib/kafka/data/.* 2>/dev/null || true
+              echo "Kafka data directory cleaned."
+          volumeMounts:
+            - name: kafka-data
+              mountPath: /var/lib/kafka/data
       containers:
         - name: kafka
           image: confluentinc/cp-kafka:7.5.0
@@ -76,7 +88,6 @@ spec:
               value: "168"
             - name: KAFKA_AUTO_LEADER_REBALANCE_ENABLE
               value: "true"
-            # DODANE: CLUSTER_ID dla trybu KRaft
             - name: CLUSTER_ID
               value: "Mk3Q6jXkSoy1Nvq7Zzr-gg"
           ports:
